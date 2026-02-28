@@ -62,3 +62,95 @@ pub fn decrypt(
             reason: e.to_string(),
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_decrypt_round_trip() {
+        let password = b"test-password-123";
+        let salt = [0xABu8; SALT_SIZE];
+        let key = derive_key(password, &salt).unwrap();
+        let nonce = [0x01u8; NONCE_SIZE];
+        let plaintext = b"Hello, memvid encryption!";
+
+        let ciphertext = encrypt(plaintext, &key, &nonce).unwrap();
+        assert_ne!(&ciphertext[..], plaintext);
+
+        let decrypted = decrypt(&ciphertext, &key, &nonce).unwrap();
+        assert_eq!(&decrypted[..], plaintext);
+    }
+
+    #[test]
+    fn wrong_key_fails_decrypt() {
+        let salt = [0xABu8; SALT_SIZE];
+        let key = derive_key(b"correct-password", &salt).unwrap();
+        let wrong_key = derive_key(b"wrong-password", &salt).unwrap();
+        let nonce = [0x01u8; NONCE_SIZE];
+        let plaintext = b"secret data";
+
+        let ciphertext = encrypt(plaintext, &key, &nonce).unwrap();
+        let result = decrypt(&ciphertext, &wrong_key, &nonce);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn empty_payload_round_trip() {
+        let salt = [0x42u8; SALT_SIZE];
+        let key = derive_key(b"password", &salt).unwrap();
+        let nonce = [0x02u8; NONCE_SIZE];
+
+        let ciphertext = encrypt(b"", &key, &nonce).unwrap();
+        let decrypted = decrypt(&ciphertext, &key, &nonce).unwrap();
+        assert!(decrypted.is_empty());
+    }
+
+    #[test]
+    fn large_payload_round_trip() {
+        let salt = [0x99u8; SALT_SIZE];
+        let key = derive_key(b"password", &salt).unwrap();
+        let nonce = [0x03u8; NONCE_SIZE];
+        let plaintext = vec![0xFFu8; 128 * 1024]; // 128KB
+
+        let ciphertext = encrypt(&plaintext, &key, &nonce).unwrap();
+        let decrypted = decrypt(&ciphertext, &key, &nonce).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn key_derivation_deterministic() {
+        let password = b"deterministic-test";
+        let salt = [0x11u8; SALT_SIZE];
+
+        let key1 = derive_key(password, &salt).unwrap();
+        let key2 = derive_key(password, &salt).unwrap();
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn different_salts_different_keys() {
+        let password = b"same-password";
+        let salt_a = [0x11u8; SALT_SIZE];
+        let salt_b = [0x22u8; SALT_SIZE];
+
+        let key_a = derive_key(password, &salt_a).unwrap();
+        let key_b = derive_key(password, &salt_b).unwrap();
+        assert_ne!(key_a, key_b);
+    }
+
+    #[test]
+    fn corrupted_ciphertext_fails() {
+        let salt = [0xCCu8; SALT_SIZE];
+        let key = derive_key(b"password", &salt).unwrap();
+        let nonce = [0x04u8; NONCE_SIZE];
+        let plaintext = b"tamper test data";
+
+        let mut ciphertext = encrypt(plaintext, &key, &nonce).unwrap();
+        if let Some(byte) = ciphertext.get_mut(0) {
+            *byte ^= 0xFF;
+        }
+        let result = decrypt(&ciphertext, &key, &nonce);
+        assert!(result.is_err());
+    }
+}

@@ -1,5 +1,5 @@
-use rand::RngCore;
 use rand::rngs::OsRng;
+use rand::RngCore;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -135,4 +135,60 @@ pub fn unlock_file_stream(
 
     key.zeroize();
     Ok(output_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+
+    fn create_test_mv2(dir: &Path, extra_bytes: usize) -> PathBuf {
+        let path = dir.join("test.mv2");
+        let mut content = Vec::new();
+        content.extend_from_slice(b"MV2\0");
+        content.extend_from_slice(&vec![0u8; 4092]);
+        content.extend_from_slice(&vec![0xAB; extra_bytes]);
+        fs::write(&path, &content).unwrap();
+        path
+    }
+
+    #[test]
+    fn stream_lock_unlock_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path(), 1024);
+        let original = fs::read(&mv2_path).unwrap();
+        let password = b"stream-password";
+
+        let encrypted_path = lock_file_stream(&mv2_path, None, password).unwrap();
+        let decrypted_out = dir.path().join("decrypted.mv2");
+        let decrypted_path = unlock_file_stream(&encrypted_path, Some(&decrypted_out), password).unwrap();
+        let decrypted = fs::read(&decrypted_path).unwrap();
+        assert_eq!(decrypted, original);
+    }
+
+    #[test]
+    fn stream_large_payload_multi_chunk() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path(), 2_500_000);
+        let original = fs::read(&mv2_path).unwrap();
+        let password = b"large-payload-pw";
+
+        let encrypted_path = lock_file_stream(&mv2_path, None, password).unwrap();
+        let decrypted_out = dir.path().join("decrypted.mv2");
+        let decrypted_path = unlock_file_stream(&encrypted_path, Some(&decrypted_out), password).unwrap();
+        let decrypted = fs::read(&decrypted_path).unwrap();
+        assert_eq!(decrypted, original);
+    }
+
+    #[test]
+    fn stream_wrong_password_fails() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path(), 512);
+        let password = b"correct";
+
+        let encrypted_path = lock_file_stream(&mv2_path, None, password).unwrap();
+        let result = unlock_file_stream(&encrypted_path, None, b"wrong");
+        assert!(result.is_err());
+    }
 }

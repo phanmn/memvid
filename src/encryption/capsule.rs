@@ -144,3 +144,64 @@ where
     atomic.commit()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+
+    fn create_test_mv2(dir: &Path) -> PathBuf {
+        let path = dir.join("test.mv2");
+        let mut content = Vec::new();
+        content.extend_from_slice(b"MV2\0");
+        content.extend_from_slice(&[0u8; 4092]);
+        content.extend_from_slice(b"test payload data for encryption");
+        fs::write(&path, &content).unwrap();
+        path
+    }
+
+    #[test]
+    fn lock_unlock_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path());
+        let original = fs::read(&mv2_path).unwrap();
+        let password = b"test-password";
+
+        let encrypted_path = lock_file(&mv2_path, None, password).unwrap();
+        assert!(encrypted_path.extension().unwrap() == "mv2e");
+
+        let encrypted = fs::read(&encrypted_path).unwrap();
+        assert_ne!(encrypted, original);
+
+        let decrypted_path = unlock_file(&encrypted_path, None, password).unwrap();
+        let decrypted = fs::read(&decrypted_path).unwrap();
+        assert_eq!(decrypted, original);
+    }
+
+    #[test]
+    fn unlock_wrong_password_fails() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path());
+        let password = b"correct-password";
+
+        let encrypted_path = lock_file(&mv2_path, None, password).unwrap();
+        let result = unlock_file(&encrypted_path, None, b"wrong-password");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_mv2_file_valid() {
+        let dir = TempDir::new().unwrap();
+        let mv2_path = create_test_mv2(dir.path());
+        assert!(validate_mv2_file(&mv2_path).is_ok());
+    }
+
+    #[test]
+    fn validate_mv2_file_invalid() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("not_mv2.bin");
+        fs::write(&path, b"NOT_MV2_DATA").unwrap();
+        assert!(validate_mv2_file(&path).is_err());
+    }
+}
