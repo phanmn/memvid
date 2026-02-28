@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
-use quick_xml::Reader as XmlReader;
 use quick_xml::events::Event;
+use quick_xml::Reader as XmlReader;
 use zip::ZipArchive;
 
 use crate::{
@@ -138,4 +138,149 @@ fn extract_plain_text(xml: &str, block_suffix: &[u8]) -> String {
     }
 
     text.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pptx_reader_name() {
+        let reader = PptxReader;
+        assert_eq!(reader.name(), "pptx");
+    }
+
+    #[test]
+    fn supports_correct_mime_type() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            None,
+        );
+        assert!(reader.supports(&hint));
+    }
+
+    #[test]
+    fn supports_document_format_pptx() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Pptx));
+        assert!(reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_pdf_mime_type() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(Some("application/pdf"), None);
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_docx_mime_type() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            None,
+        );
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_plain_text_format() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::PlainText));
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn invalid_bytes_returns_error_or_fallback() {
+        let reader = PptxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Pptx));
+        // Not a valid zip/pptx - extract_text will fail, then fallback to PassthroughReader
+        // which may also fail on garbage bytes. Either way we should not panic.
+        let result = reader.extract(b"this is not a pptx file", &hint);
+        match result {
+            Ok(output) => {
+                assert_eq!(output.reader_name, "pptx");
+                assert!(output.diagnostics.fallback);
+            }
+            Err(_) => {
+                // Also acceptable - extraction failed for invalid data
+            }
+        }
+    }
+
+    #[test]
+    fn extract_plain_text_from_sample_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:sp>
+        <p:txBody>
+          <a:p>
+            <a:r><a:t>Slide Title</a:t></a:r>
+          </a:p>
+          <a:p>
+            <a:r><a:t>Bullet point one</a:t></a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+</p:sld>"#;
+        let result = extract_plain_text(xml, b"p");
+        assert!(
+            result.contains("Slide Title"),
+            "should contain 'Slide Title', got: {result}"
+        );
+        assert!(
+            result.contains("Bullet point one"),
+            "should contain 'Bullet point one', got: {result}"
+        );
+    }
+
+    #[test]
+    fn extract_plain_text_empty_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:spTree></p:spTree>
+  </p:cSld>
+</p:sld>"#;
+        let result = extract_plain_text(xml, b"p");
+        assert!(
+            result.is_empty(),
+            "empty slide should produce empty text, got: {result}"
+        );
+    }
+
+    #[test]
+    fn extract_plain_text_multiple_text_runs() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:sp>
+        <p:txBody>
+          <a:p>
+            <a:r><a:t>First run</a:t></a:r>
+            <a:r><a:t>Second run</a:t></a:r>
+          </a:p>
+        </p:txBody>
+      </p:sp>
+    </p:spTree>
+  </p:cSld>
+</p:sld>"#;
+        let result = extract_plain_text(xml, b"p");
+        assert!(
+            result.contains("First run"),
+            "should contain 'First run', got: {result}"
+        );
+        assert!(
+            result.contains("Second run"),
+            "should contain 'Second run', got: {result}"
+        );
+    }
 }

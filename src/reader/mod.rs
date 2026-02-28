@@ -218,3 +218,152 @@ impl Default for ReaderRegistry {
         registry
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_registry_is_empty() {
+        let registry = ReaderRegistry::new();
+        assert!(registry.readers().is_empty());
+    }
+
+    #[test]
+    fn default_registry_has_readers() {
+        let registry = ReaderRegistry::default();
+        assert!(
+            !registry.readers().is_empty(),
+            "default registry should have at least one reader"
+        );
+    }
+
+    #[test]
+    fn find_reader_by_pdf_mime() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(Some("application/pdf"), None);
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for PDF MIME type");
+    }
+
+    #[test]
+    fn find_reader_by_docx_mime() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            None,
+        );
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for DOCX MIME type");
+        assert_eq!(reader.unwrap().name(), "docx");
+    }
+
+    #[test]
+    fn find_reader_by_pptx_mime() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            None,
+        );
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for PPTX MIME type");
+        assert_eq!(reader.unwrap().name(), "pptx");
+    }
+
+    #[test]
+    fn find_reader_by_xlsx_mime() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            None,
+        );
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for XLSX MIME type");
+    }
+
+    #[test]
+    fn find_reader_by_document_format_pdf() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Pdf));
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for PDF format");
+    }
+
+    #[test]
+    fn find_reader_by_document_format_docx() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Docx));
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for Docx format");
+        assert_eq!(reader.unwrap().name(), "docx");
+    }
+
+    #[test]
+    fn find_reader_by_document_format_pptx() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Pptx));
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for Pptx format");
+        assert_eq!(reader.unwrap().name(), "pptx");
+    }
+
+    #[test]
+    fn find_reader_by_document_format_xlsx() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Xlsx));
+        let reader = registry.find_reader(&hint);
+        assert!(reader.is_some(), "should find a reader for Xlsx format");
+    }
+
+    #[test]
+    fn document_format_label_values() {
+        assert_eq!(DocumentFormat::Pdf.label(), "pdf");
+        assert_eq!(DocumentFormat::Docx.label(), "docx");
+        assert_eq!(DocumentFormat::Xlsx.label(), "xlsx");
+        assert_eq!(DocumentFormat::Xls.label(), "xls");
+        assert_eq!(DocumentFormat::Pptx.label(), "pptx");
+        assert_eq!(DocumentFormat::PlainText.label(), "text");
+        assert_eq!(DocumentFormat::Markdown.label(), "markdown");
+        assert_eq!(DocumentFormat::Html.label(), "html");
+        assert_eq!(DocumentFormat::Jsonl.label(), "jsonl");
+        assert_eq!(DocumentFormat::Unknown.label(), "unknown");
+    }
+
+    #[test]
+    fn passthrough_reader_supports_plain_text() {
+        let registry = ReaderRegistry::default();
+        let hint = ReaderHint::new(Some("text/plain"), Some(DocumentFormat::PlainText));
+        let reader = registry.find_reader(&hint);
+        assert!(
+            reader.is_some(),
+            "should find a reader for plain text content"
+        );
+        assert_eq!(reader.unwrap().name(), "document_processor");
+    }
+
+    #[test]
+    fn reader_hint_builder_methods() {
+        let hint = ReaderHint::new(Some("application/pdf"), Some(DocumentFormat::Pdf))
+            .with_uri(Some("file:///test.pdf"))
+            .with_magic(Some(&[0x25, 0x50, 0x44, 0x46]));
+        assert_eq!(hint.mime, Some("application/pdf"));
+        assert_eq!(hint.format, Some(DocumentFormat::Pdf));
+        assert_eq!(hint.uri, Some("file:///test.pdf"));
+        assert_eq!(hint.magic_bytes, Some([0x25, 0x50, 0x44, 0x46].as_ref()));
+    }
+
+    #[test]
+    fn no_reader_found_returns_none_for_unsupported_format() {
+        let registry = ReaderRegistry::new(); // empty registry
+        let hint = ReaderHint::new(Some("application/pdf"), None);
+        assert!(registry.find_reader(&hint).is_none());
+    }
+
+    #[test]
+    fn register_adds_reader() {
+        let mut registry = ReaderRegistry::new();
+        assert_eq!(registry.readers().len(), 0);
+        registry.register(PassthroughReader);
+        assert_eq!(registry.readers().len(), 1);
+    }
+}
