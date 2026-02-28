@@ -61,7 +61,7 @@ impl ReplayAction {
     ///
     /// # Security
     /// This function implements multiple layers of defense against malicious input:
-    /// - **Size Validation**: Enforces strict 10MB limit, rejecting larger payloads
+    /// - **Size Validation**: Enforces strict 64MB limit, rejecting larger payloads
     /// - **Content Sanitization**: Removes control characters that could enable injection
     /// - **Memory Safety**: Uses safe UTF-8 conversion with lossy handling
     /// - **`DoS` Prevention**: Prevents memory exhaustion and resource abuse
@@ -70,8 +70,8 @@ impl ReplayAction {
     #[must_use]
     pub fn with_input(mut self, data: &[u8]) -> Self {
         // Security: Multi-layer validation to prevent exploitation
-        const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024; // 10MB hard limit
-        const WARN_INPUT_SIZE: usize = 1024 * 1024; // 1MB warning threshold
+        const MAX_INPUT_SIZE: usize = 64 * 1024 * 1024; // 64MB hard limit
+        const WARN_INPUT_SIZE: usize = 8 * 1024 * 1024; // 8MB warning threshold
 
         // Reject oversized data completely to prevent DoS
         if data.is_empty() {
@@ -126,8 +126,8 @@ impl ReplayAction {
     #[must_use]
     pub fn with_output(mut self, data: &[u8]) -> Self {
         // Security: Multi-layer validation to prevent exploitation
-        const MAX_OUTPUT_SIZE: usize = 10 * 1024 * 1024; // 10MB hard limit
-        const WARN_OUTPUT_SIZE: usize = 1024 * 1024; // 1MB warning threshold
+        const MAX_OUTPUT_SIZE: usize = 64 * 1024 * 1024; // 64MB hard limit
+        const WARN_OUTPUT_SIZE: usize = 8 * 1024 * 1024; // 8MB warning threshold
 
         // Reject oversized data completely to prevent DoS
         if data.is_empty() {
@@ -543,5 +543,168 @@ mod tests {
         assert_eq!(summary.action_count, 1);
         assert_eq!(summary.checkpoint_count, 1);
         assert_eq!(summary.name, Some("Summary Test".to_string()));
+    }
+
+    #[test]
+    fn replay_action_new_with_various_action_types() {
+        let put = ReplayAction::new(0, ActionType::Put { frame_id: 42 });
+        assert_eq!(put.sequence, 0);
+        assert_eq!(put.duration_ms, 0);
+
+        let delete = ReplayAction::new(1, ActionType::Delete { frame_id: 7 });
+        assert_eq!(delete.sequence, 1);
+
+        let update = ReplayAction::new(2, ActionType::Update { frame_id: 99 });
+        assert_eq!(update.sequence, 2);
+
+        let checkpoint = ReplayAction::new(3, ActionType::Checkpoint { checkpoint_id: 0 });
+        assert_eq!(checkpoint.sequence, 3);
+    }
+
+    #[test]
+    fn with_input_sets_hash_and_preview() {
+        let action = ReplayAction::new(0, ActionType::Put { frame_id: 1 })
+            .with_input(b"hello world");
+        assert_ne!(action.input_hash, [0u8; 32]);
+        assert!(!action.input_preview.is_empty());
+    }
+
+    #[test]
+    fn with_output_sets_hash_and_preview() {
+        let action = ReplayAction::new(0, ActionType::Put { frame_id: 1 })
+            .with_output(b"output data");
+        assert_ne!(action.output_hash, [0u8; 32]);
+        assert!(!action.output_preview.is_empty());
+    }
+
+    #[test]
+    fn with_duration_ms_sets_duration() {
+        let action = ReplayAction::new(0, ActionType::Put { frame_id: 1 })
+            .with_duration_ms(500);
+        assert_eq!(action.duration_ms, 500);
+    }
+
+    #[test]
+    fn replay_session_new_is_recording() {
+        let session = ReplaySession::new(Some("test".to_string()));
+        assert!(session.is_recording());
+        assert!(session.ended_secs.is_none());
+        assert!(session.actions.is_empty());
+    }
+
+    #[test]
+    fn replay_session_add_action_and_next_sequence() {
+        let mut session = ReplaySession::new(None);
+        assert_eq!(session.next_sequence(), 0);
+
+        session.add_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+        assert_eq!(session.next_sequence(), 1);
+
+        session.add_action(ReplayAction::new(1, ActionType::Put { frame_id: 2 }));
+        assert_eq!(session.next_sequence(), 2);
+    }
+
+    #[test]
+    fn replay_session_end_marks_not_recording() {
+        let mut session = ReplaySession::new(None);
+        assert!(session.is_recording());
+        session.end();
+        assert!(!session.is_recording());
+        assert!(session.ended_secs.is_some());
+    }
+
+    #[test]
+    fn action_type_name_returns_correct_strings() {
+        assert_eq!(ActionType::Put { frame_id: 0 }.name(), "PUT");
+        assert_eq!(
+            ActionType::PutMany {
+                frame_ids: vec![],
+                count: 0,
+            }
+            .name(),
+            "PUT_MANY"
+        );
+        assert_eq!(
+            ActionType::Find {
+                query: "q".into(),
+                mode: "lexical".into(),
+                result_count: 0,
+            }
+            .name(),
+            "FIND"
+        );
+        assert_eq!(
+            ActionType::Ask {
+                query: "q".into(),
+                provider: "p".into(),
+                model: "m".into(),
+            }
+            .name(),
+            "ASK"
+        );
+        assert_eq!(
+            ActionType::Checkpoint { checkpoint_id: 0 }.name(),
+            "CHECKPOINT"
+        );
+        assert_eq!(ActionType::Update { frame_id: 0 }.name(), "UPDATE");
+        assert_eq!(ActionType::Delete { frame_id: 0 }.name(), "DELETE");
+        assert_eq!(
+            ActionType::ToolCall {
+                name: "t".into(),
+                args_hash: [0; 32],
+            }
+            .name(),
+            "TOOL_CALL"
+        );
+    }
+
+    #[test]
+    fn checkpoint_new_has_correct_id() {
+        let snap = StateSnapshot::default();
+        let cp = Checkpoint::new(42, 10, snap);
+        assert_eq!(cp.id, 42);
+        assert_eq!(cp.at_sequence, 10);
+    }
+
+    #[test]
+    fn state_snapshot_default_has_zero_values() {
+        let snap = StateSnapshot::default();
+        assert_eq!(snap.frame_count, 0);
+        assert!(snap.frame_ids.is_empty());
+        assert!(snap.lex_index_hash.is_none());
+        assert!(snap.vec_index_hash.is_none());
+        assert_eq!(snap.wal_sequence, 0);
+        assert_eq!(snap.generation, 0);
+    }
+
+    #[test]
+    fn replay_manifest_default_has_no_sessions() {
+        let manifest = ReplayManifest::default();
+        assert!(!manifest.has_sessions());
+        assert_eq!(manifest.session_count, 0);
+        assert_eq!(manifest.total_actions, 0);
+    }
+
+    #[test]
+    fn replay_manifest_has_sessions_when_count_positive() {
+        let manifest = ReplayManifest {
+            session_count: 3,
+            ..Default::default()
+        };
+        assert!(manifest.has_sessions());
+    }
+
+    #[test]
+    fn session_summary_from_session() {
+        let mut session = ReplaySession::new(Some("FromTest".to_string()));
+        session.add_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+        session.add_action(ReplayAction::new(1, ActionType::Delete { frame_id: 1 }));
+        session.add_checkpoint(Checkpoint::new(0, 1, StateSnapshot::default()));
+
+        let summary = SessionSummary::from(&session);
+        assert_eq!(summary.action_count, 2);
+        assert_eq!(summary.checkpoint_count, 1);
+        assert_eq!(summary.name, Some("FromTest".to_string()));
+        assert_eq!(summary.session_id, session.session_id);
     }
 }

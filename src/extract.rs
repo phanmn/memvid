@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::{Result, error::MemvidError, text::truncate_at_grapheme_boundary};
+use crate::{error::MemvidError, text::truncate_at_grapheme_boundary, Result};
 // Use SymSpell-based cleanup when feature is enabled, otherwise fall back to heuristic
 #[cfg(feature = "symspell_cleanup")]
 use crate::symspell_cleanup::fix_pdf_text as fix_pdf_spacing;
@@ -11,7 +11,7 @@ use crate::text::fix_pdf_spacing;
 #[cfg(feature = "extractous")]
 use log::LevelFilter;
 use lopdf::Document as LopdfDocument;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 #[cfg(feature = "extractous")]
 use extractous::Extractor;
@@ -460,9 +460,9 @@ fn pdf_fallback_metadata() -> Value {
 }
 
 #[cfg(feature = "extractous")]
-const PDF_FALLBACK_MAX_BYTES: usize = 64 * 1024 * 1024; // 64 MiB hard cap.
+const PDF_FALLBACK_MAX_BYTES: usize = 256 * 1024 * 1024; // 256 MiB hard cap.
 #[cfg(feature = "extractous")]
-const PDF_FALLBACK_MAX_PAGES: usize = 4_096;
+const PDF_FALLBACK_MAX_PAGES: usize = 16_384;
 
 #[cfg(feature = "extractous")]
 fn pdf_text_fallback(bytes: &[u8]) -> Result<Option<String>> {
@@ -640,9 +640,9 @@ fn cache_store(hash: blake3::Hash, document: &ExtractedDocument) {
 // ============================================================================
 
 #[allow(dead_code)]
-const PDF_LOPDF_MAX_BYTES: usize = 64 * 1024 * 1024; // 64 MiB hard cap
+const PDF_LOPDF_MAX_BYTES: usize = 256 * 1024 * 1024; // 256 MiB hard cap
 #[allow(dead_code)]
-const PDF_LOPDF_MAX_PAGES: usize = 4_096;
+const PDF_LOPDF_MAX_PAGES: usize = 16_384;
 
 /// Try multiple PDF extractors and return the best result
 /// Returns (text, `extractor_name`) or None if no text found
@@ -973,6 +973,37 @@ mod pdf_fix_tests {
 // ============================================================================
 // Tests for ExtractionCache LRU eviction
 // ============================================================================
+
+#[cfg(test)]
+mod infrastructure_tests {
+    use super::*;
+
+    #[test]
+    fn extracted_document_empty_has_no_text() {
+        let doc = ExtractedDocument::empty();
+        assert!(doc.text.is_none());
+        assert_eq!(doc.metadata, serde_json::Value::Null);
+        assert!(doc.mime_type.is_none());
+    }
+
+    #[test]
+    fn processor_config_default_has_positive_max_text_chars() {
+        let config = ProcessorConfig::default();
+        assert!(config.max_text_chars > 0);
+    }
+
+    #[test]
+    fn document_processor_new_does_not_panic() {
+        let _processor = DocumentProcessor::new(ProcessorConfig::default());
+    }
+
+    #[test]
+    fn extract_from_path_nonexistent_returns_error() {
+        let processor = DocumentProcessor::new(ProcessorConfig::default());
+        let result = processor.extract_from_path(Path::new("/nonexistent/path/to/file.txt"));
+        assert!(result.is_err());
+    }
+}
 
 #[cfg(all(test, feature = "extractous"))]
 mod extraction_cache_tests {

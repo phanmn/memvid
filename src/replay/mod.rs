@@ -45,12 +45,12 @@ pub use engine::{
 };
 pub use types::{
     ActionType, Checkpoint, ComparisonReport, ComparisonSummary, Divergence, DivergenceType,
-    ModelResult, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION, ReplayAction, ReplayManifest,
-    ReplayOptions, ReplayResult, ReplaySession, SessionSummary, StateSnapshot,
+    ModelResult, ReplayAction, ReplayManifest, ReplayOptions, ReplayResult, ReplaySession,
+    SessionSummary, StateSnapshot, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION,
 };
 
-use crate::MemvidError;
 use crate::error::Result;
+use crate::MemvidError;
 use uuid::Uuid;
 
 /// Configuration for replay recording
@@ -131,7 +131,7 @@ impl ActiveSession {
 
 /// Storage operations for replay segments
 pub mod storage {
-    use super::{MemvidError, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION, ReplaySession, Result};
+    use super::{MemvidError, ReplaySession, Result, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION};
     use bincode::config::{self, Config};
     use std::io::{Read, Write};
 
@@ -371,5 +371,99 @@ mod tests {
         assert_eq!(restored.len(), 2);
         assert_eq!(restored[0].session_id, session1.session_id);
         assert_eq!(restored[1].session_id, session2.session_id);
+    }
+
+    #[test]
+    fn replay_config_default_has_positive_auto_checkpoint_interval() {
+        // Default auto_checkpoint_interval is 0 (disabled) which is valid,
+        // but we test that the struct initializes without panic
+        let config = ReplayConfig::default();
+        // auto_checkpoint_interval of 0 means disabled; this is a valid default
+        assert_eq!(config.auto_checkpoint_interval, 0);
+        assert!(!config.auto_record);
+    }
+
+    #[test]
+    fn active_session_new_construction() {
+        let config = ReplayConfig {
+            auto_checkpoint_interval: 5,
+            max_actions_per_session: Some(100),
+            auto_record: true,
+        };
+        let active = ActiveSession::new(Some("my session".to_string()), config);
+        assert_eq!(active.next_checkpoint_id, 0);
+        assert_eq!(active.actions_since_checkpoint, 0);
+        assert!(active.session.is_recording());
+        assert_eq!(active.session.name, Some("my session".to_string()));
+    }
+
+    #[test]
+    fn record_action_adds_actions() {
+        let config = ReplayConfig::default();
+        let mut active = ActiveSession::new(None, config);
+        assert_eq!(active.session.actions.len(), 0);
+
+        active.record_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+        assert_eq!(active.session.actions.len(), 1);
+        assert_eq!(active.actions_since_checkpoint, 1);
+
+        active.record_action(ReplayAction::new(1, ActionType::Delete { frame_id: 1 }));
+        assert_eq!(active.session.actions.len(), 2);
+        assert_eq!(active.actions_since_checkpoint, 2);
+    }
+
+    #[test]
+    fn should_checkpoint_with_interval_1() {
+        let config = ReplayConfig {
+            auto_checkpoint_interval: 1,
+            ..Default::default()
+        };
+        let mut active = ActiveSession::new(None, config);
+        assert!(!active.should_checkpoint());
+
+        active.record_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+        assert!(active.should_checkpoint());
+    }
+
+    #[test]
+    fn create_checkpoint_returns_correct_id() {
+        let config = ReplayConfig {
+            auto_checkpoint_interval: 1,
+            ..Default::default()
+        };
+        let mut active = ActiveSession::new(None, config);
+        active.record_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+
+        let cp = active.create_checkpoint(StateSnapshot::default());
+        assert_eq!(cp.id, 0);
+        assert_eq!(active.actions_since_checkpoint, 0);
+        assert_eq!(active.next_checkpoint_id, 1);
+
+        // Create another checkpoint
+        active.record_action(ReplayAction::new(1, ActionType::Put { frame_id: 2 }));
+        let cp2 = active.create_checkpoint(StateSnapshot::default());
+        assert_eq!(cp2.id, 1);
+        assert_eq!(active.next_checkpoint_id, 2);
+    }
+
+    #[test]
+    fn end_returns_completed_session() {
+        let config = ReplayConfig::default();
+        let mut active = ActiveSession::new(Some("ending".to_string()), config);
+        active.record_action(ReplayAction::new(0, ActionType::Put { frame_id: 1 }));
+
+        let session = active.end();
+        assert!(!session.is_recording());
+        assert!(session.ended_secs.is_some());
+        assert_eq!(session.actions.len(), 1);
+        assert_eq!(session.name, Some("ending".to_string()));
+    }
+
+    #[test]
+    fn session_id_returns_uuid() {
+        let active = ActiveSession::new(None, ReplayConfig::default());
+        let id = active.session_id();
+        // UUID should not be nil
+        assert_ne!(id, uuid::Uuid::nil());
     }
 }

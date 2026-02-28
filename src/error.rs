@@ -235,3 +235,129 @@ impl From<tantivy::TantivyError> for MemvidError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    #[test]
+    fn io_error_display_is_non_empty() {
+        let err = MemvidError::Io {
+            source: io::Error::new(io::ErrorKind::NotFound, "file missing"),
+            path: None,
+        };
+        let msg = format!("{err}");
+        assert!(!msg.is_empty());
+        assert!(msg.contains("I/O error"));
+    }
+
+    #[test]
+    fn checksum_mismatch_display_is_non_empty() {
+        let err = MemvidError::ChecksumMismatch {
+            context: "header",
+        };
+        let msg = format!("{err}");
+        assert!(!msg.is_empty());
+        assert!(msg.contains("Checksum mismatch"));
+    }
+
+    #[test]
+    fn invalid_header_display_is_non_empty() {
+        let err = MemvidError::InvalidHeader {
+            reason: "bad magic".into(),
+        };
+        let msg = format!("{err}");
+        assert!(!msg.is_empty());
+        assert!(msg.contains("Header validation failed"));
+    }
+
+    #[test]
+    fn locked_error_display_is_non_empty() {
+        let locked = LockedError::new(
+            PathBuf::from("/tmp/test.mv2"),
+            "locked by another process",
+            None,
+            false,
+        );
+        let err = MemvidError::Locked(Box::new(locked));
+        let msg = format!("{err}");
+        assert!(!msg.is_empty());
+        assert!(msg.contains("locked"));
+    }
+
+    #[test]
+    fn from_io_error_conversion() {
+        let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "access denied");
+        let memvid_err: MemvidError = io_err.into();
+        match memvid_err {
+            MemvidError::Io { source, path } => {
+                assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+                assert!(path.is_none());
+            }
+            other => panic!("Expected MemvidError::Io, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lock_owner_hint_construction() {
+        let hint = LockOwnerHint {
+            pid: Some(12345),
+            cmd: Some("memvid build".to_string()),
+            started_at: Some("2026-01-01T00:00:00Z".to_string()),
+            file_path: Some(PathBuf::from("/tmp/test.mv2")),
+            file_id: Some("abc-123".to_string()),
+            last_heartbeat: Some("2026-01-01T00:00:01Z".to_string()),
+            heartbeat_ms: Some(2000),
+        };
+        assert_eq!(hint.pid, Some(12345));
+        assert_eq!(hint.cmd.as_deref(), Some("memvid build"));
+        assert!(hint.file_path.is_some());
+    }
+
+    #[test]
+    fn locked_error_new_with_owner_hint() {
+        let hint = LockOwnerHint {
+            pid: Some(999),
+            cmd: None,
+            started_at: None,
+            file_path: None,
+            file_id: None,
+            last_heartbeat: None,
+            heartbeat_ms: None,
+        };
+        let err = LockedError::new(
+            PathBuf::from("/data/file.mv2"),
+            "locked by pid 999",
+            Some(hint),
+            true,
+        );
+        assert!(err.stale);
+        assert!(err.owner.is_some());
+        assert_eq!(err.file, PathBuf::from("/data/file.mv2"));
+    }
+
+    #[test]
+    fn various_error_variants_have_non_empty_display() {
+        let errors: Vec<MemvidError> = vec![
+            MemvidError::Lock("test lock".to_string()),
+            MemvidError::LexNotEnabled,
+            MemvidError::VecNotEnabled,
+            MemvidError::ClipNotEnabled,
+            MemvidError::InvalidTier,
+            MemvidError::RequiresSealed,
+            MemvidError::RequiresOpen,
+            MemvidError::DoctorNoOp,
+            MemvidError::ExtractionFailed {
+                reason: "test".into(),
+            },
+            MemvidError::EmbeddingFailed {
+                reason: "test".into(),
+            },
+        ];
+        for err in &errors {
+            let msg = format!("{err}");
+            assert!(!msg.is_empty(), "Empty display for error: {err:?}");
+        }
+    }
+}

@@ -211,3 +211,120 @@ pub fn current_owner(path: &Path) -> Result<Option<LockOwnerHint>> {
     let record = registry::read_record(&file_id)?;
     Ok(registry::to_owner_hint(record))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    /// Helper: create a real file inside a temp dir and return its path.
+    fn create_temp_file(dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {
+        let path = dir.path().join(name);
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(content).unwrap();
+        f.flush().unwrap();
+        path
+    }
+
+    #[test]
+    fn lock_options_default_has_positive_timeout_and_heartbeat() {
+        let opts = LockOptions::default();
+        assert!(opts.timeout.as_millis() > 0);
+        assert!(opts.heartbeat.as_millis() > 0);
+        assert!(opts.stale_grace.as_millis() > 0);
+        assert!(opts.command.is_none());
+        assert!(!opts.force_stale);
+    }
+
+    #[test]
+    fn builder_timeout_ms() {
+        let opts = LockOptions::default().timeout_ms(5000);
+        assert_eq!(opts.timeout, Duration::from_millis(5000));
+    }
+
+    #[test]
+    fn builder_heartbeat_ms() {
+        let opts = LockOptions::default().heartbeat_ms(3000);
+        assert_eq!(opts.heartbeat, Duration::from_millis(3000));
+    }
+
+    #[test]
+    fn builder_command() {
+        let opts = LockOptions::default().command("my-command");
+        assert_eq!(opts.command, Some("my-command"));
+    }
+
+    #[test]
+    fn builder_force_stale() {
+        let opts = LockOptions::default().force_stale(true);
+        assert!(opts.force_stale);
+    }
+
+    #[test]
+    fn acquire_succeeds_on_real_file() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "locktest.mv2", b"file content for locking");
+        let guard = acquire(&path, LockOptions::default().command("test-acquire"));
+        assert!(guard.is_ok());
+        // Guard is dropped here, releasing the lock
+    }
+
+    #[test]
+    fn current_owner_returns_none_when_no_lock() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "no_lock.mv2", b"some data");
+        // Ensure no stale lock record exists
+        if let Ok(file_id) = registry::compute_file_id(&path) {
+            let _ = registry::remove_record(&file_id);
+        }
+        // Also remove any lockfile that might exist
+        let lock_path = {
+            let mut p = path.clone();
+            p.set_extension("mv2.lock");
+            p
+        };
+        let _ = std::fs::remove_file(&lock_path);
+
+        let owner = current_owner(&path).unwrap();
+        assert!(owner.is_none());
+    }
+
+    #[test]
+    fn heartbeat_on_guard_succeeds() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "heartbeat.mv2", b"heartbeat data");
+        let mut guard = acquire(&path, LockOptions::default().command("test-heartbeat")).unwrap();
+        let result = guard.heartbeat();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn lock_released_on_guard_drop() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "drop_test.mv2", b"drop data");
+
+        // Acquire and then drop
+        {
+            let _guard = acquire(&path, LockOptions::default().command("test-drop")).unwrap();
+            // guard is alive here
+        }
+        // guard is dropped; we should be able to acquire again
+        let guard2 = acquire(&path, LockOptions::default().command("test-drop-2"));
+        assert!(guard2.is_ok());
+    }
+
+    #[test]
+    fn lockfile_path_adds_lock_extension() {
+        let path = Path::new("/tmp/test.mv2");
+        let lock = lockfile_path(path);
+        assert_eq!(lock, PathBuf::from("/tmp/test.mv2.lock"));
+    }
+
+    #[test]
+    fn lockfile_path_no_extension() {
+        let path = Path::new("/tmp/testfile");
+        let lock = lockfile_path(path);
+        assert_eq!(lock, PathBuf::from("/tmp/testfile.lock"));
+    }
+}
