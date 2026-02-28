@@ -1,7 +1,5 @@
 // Safe unwrap: guaranteed non-empty vector operations.
 #![allow(clippy::unwrap_used)]
-use crate::MemvidError;
-use crate::Result;
 use crate::memvid::lifecycle::Memvid;
 #[cfg(not(feature = "temporal_track"))]
 #[allow(unused_imports)]
@@ -11,12 +9,14 @@ use crate::types::{
     FrameId, SearchHitTemporal, SearchHitTemporalAnchor, SearchHitTemporalMention, TemporalMention,
 };
 use crate::types::{SearchEngineKind, SearchHit, SearchHitMetadata, SearchParams, SearchResponse};
+use crate::MemvidError;
+use crate::Result;
 #[cfg(feature = "temporal_track")]
 use std::collections::HashMap;
 #[cfg(feature = "temporal_track")]
 use std::collections::HashSet;
 use std::collections::{BTreeMap, HashSet as StdHashSet};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub(super) fn empty_search_response(
     query: String,
@@ -420,5 +420,216 @@ pub(super) fn enrich_hits_with_entities(hits: &mut [SearchHit], memvid: &Memvid)
             let metadata = hit.metadata.get_or_insert_with(SearchHitMetadata::default);
             metadata.entities = entities;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_search_response_has_correct_fields() {
+        let params = SearchParams {
+            top_k: 10,
+            snippet_chars: 200,
+            cursor: None,
+        };
+        let response = empty_search_response(
+            "test query".to_string(),
+            params,
+            42,
+            SearchEngineKind::Tantivy,
+        );
+
+        assert_eq!(response.query, "test query");
+        assert_eq!(response.elapsed_ms, 42);
+        assert_eq!(response.total_hits, 0);
+        assert!(response.hits.is_empty());
+        assert!(response.context.is_empty());
+        assert!(response.next_cursor.is_none());
+        assert_eq!(response.engine, SearchEngineKind::Tantivy);
+        assert_eq!(response.params.top_k, 10);
+        assert_eq!(response.params.snippet_chars, 200);
+    }
+
+    #[test]
+    fn empty_search_response_with_lex_fallback_engine() {
+        let params = SearchParams {
+            top_k: 5,
+            snippet_chars: 100,
+            cursor: Some("3".to_string()),
+        };
+        let response = empty_search_response(
+            "another query".to_string(),
+            params,
+            0,
+            SearchEngineKind::LexFallback,
+        );
+        assert_eq!(response.engine, SearchEngineKind::LexFallback);
+        assert_eq!(response.params.cursor, Some("3".to_string()));
+    }
+
+    #[test]
+    fn timestamp_to_rfc3339_valid_epoch() {
+        let result = timestamp_to_rfc3339(0);
+        assert!(result.is_some());
+        let rfc = result.unwrap();
+        assert!(rfc.contains("1970-01-01"));
+    }
+
+    #[test]
+    fn timestamp_to_rfc3339_known_date() {
+        // 2024-01-01T00:00:00Z = 1704067200
+        let result = timestamp_to_rfc3339(1704067200);
+        assert!(result.is_some());
+        let rfc = result.unwrap();
+        assert!(rfc.contains("2024-01-01"));
+    }
+
+    #[test]
+    fn timestamp_to_rfc3339_negative_timestamp() {
+        // Negative timestamps (before epoch) should still work
+        let result = timestamp_to_rfc3339(-86400);
+        assert!(result.is_some());
+        let rfc = result.unwrap();
+        assert!(rfc.contains("1969-12-31"));
+    }
+
+    #[test]
+    fn parse_cursor_none_returns_zero() {
+        let result = parse_cursor(None, 100).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn parse_cursor_empty_string_returns_zero() {
+        let result = parse_cursor(Some(""), 100).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn parse_cursor_whitespace_returns_zero() {
+        let result = parse_cursor(Some("   "), 100).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn parse_cursor_valid_number() {
+        let result = parse_cursor(Some("5"), 100).unwrap();
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn parse_cursor_at_boundary() {
+        let result = parse_cursor(Some("100"), 100).unwrap();
+        assert_eq!(result, 100);
+    }
+
+    #[test]
+    fn parse_cursor_beyond_total_hits_errors() {
+        let result = parse_cursor(Some("101"), 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_cursor_non_integer_errors() {
+        let result = parse_cursor(Some("abc"), 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_cursor_with_whitespace_padding() {
+        let result = parse_cursor(Some("  7  "), 100).unwrap();
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn collect_token_occurrences_basic() {
+        let content = "the fox jumped over the lazy fox";
+        let tokens = vec!["fox".to_string()];
+        let occurrences = collect_token_occurrences(content, &tokens);
+        assert_eq!(occurrences.len(), 2);
+    }
+
+    #[test]
+    fn collect_token_occurrences_multiple_tokens() {
+        let content = "hello world hello";
+        let tokens = vec!["hello".to_string(), "world".to_string()];
+        let occurrences = collect_token_occurrences(content, &tokens);
+        // "hello" at 0..5 and 12..17, "world" at 6..11
+        assert_eq!(occurrences.len(), 3);
+    }
+
+    #[test]
+    fn collect_token_occurrences_empty_tokens_skipped() {
+        let content = "hello world";
+        let tokens = vec!["".to_string(), "  ".to_string()];
+        let occurrences = collect_token_occurrences(content, &tokens);
+        assert!(occurrences.is_empty());
+    }
+
+    #[test]
+    fn collect_token_occurrences_no_match() {
+        let content = "hello world";
+        let tokens = vec!["xyz".to_string()];
+        let occurrences = collect_token_occurrences(content, &tokens);
+        assert!(occurrences.is_empty());
+    }
+
+    #[test]
+    fn build_context_empty_hits() {
+        let result = build_context(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn build_context_single_hit() {
+        let hits = vec![SearchHit {
+            rank: 1,
+            frame_id: 0,
+            uri: "mv2://test/doc".to_string(),
+            title: Some("Test Doc".to_string()),
+            range: (0, 10),
+            text: "test content".to_string(),
+            matches: 1,
+            chunk_range: None,
+            chunk_text: None,
+            score: None,
+            metadata: None,
+        }];
+        let context = build_context(&hits);
+        assert!(!context.is_empty());
+        assert!(context.contains("test content"));
+        assert!(context.contains("Test Doc"));
+    }
+
+    #[test]
+    fn reorder_hits_empty_input() {
+        let mut hits: Vec<SearchHit> = Vec::new();
+        let tokens: Vec<String> = vec!["test".to_string()];
+        // Should not panic on empty input
+        reorder_hits_by_token_matches(&mut hits, &tokens);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn reorder_hits_empty_tokens() {
+        let mut hits = vec![SearchHit {
+            rank: 1,
+            frame_id: 0,
+            uri: "mv2://test".to_string(),
+            title: None,
+            range: (0, 10),
+            text: "content".to_string(),
+            matches: 1,
+            chunk_range: None,
+            chunk_text: None,
+            score: None,
+            metadata: None,
+        }];
+        let tokens: Vec<String> = Vec::new();
+        // Should not panic with empty tokens
+        reorder_hits_by_token_matches(&mut hits, &tokens);
+        assert_eq!(hits.len(), 1);
     }
 }

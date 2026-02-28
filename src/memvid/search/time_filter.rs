@@ -1,15 +1,15 @@
-use crate::Result;
 use crate::io::time_index::read_track as time_index_read;
 use crate::memvid::lifecycle::Memvid;
+use crate::Result;
 
-#[cfg(feature = "temporal_track")]
-use crate::MemvidError;
 #[cfg(feature = "temporal_track")]
 use crate::analysis::temporal::{
     TemporalContext, TemporalNormalizer, TemporalResolution, TemporalResolutionValue,
 };
 #[cfg(feature = "temporal_track")]
 use crate::types::{TemporalFilter, TemporalMention, TemporalMentionKind};
+#[cfg(feature = "temporal_track")]
+use crate::MemvidError;
 #[cfg(feature = "temporal_track")]
 use std::collections::{HashMap, HashSet};
 #[cfg(feature = "temporal_track")]
@@ -344,4 +344,213 @@ fn last_day_in_month(year: i32, month: time::Month) -> Date {
         }
     }
     date
+}
+
+#[cfg(test)]
+#[cfg(feature = "temporal_track")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounds_contains_point_within_range() {
+        let bounds = Bounds::new(Some(100), Some(200));
+        assert!(bounds.contains(100));
+        assert!(bounds.contains(150));
+        assert!(bounds.contains(200));
+    }
+
+    #[test]
+    fn bounds_contains_rejects_outside_range() {
+        let bounds = Bounds::new(Some(100), Some(200));
+        assert!(!bounds.contains(99));
+        assert!(!bounds.contains(201));
+    }
+
+    #[test]
+    fn bounds_contains_open_start() {
+        let bounds = Bounds::new(None, Some(200));
+        assert!(bounds.contains(i64::MIN));
+        assert!(bounds.contains(0));
+        assert!(bounds.contains(200));
+        assert!(!bounds.contains(201));
+    }
+
+    #[test]
+    fn bounds_contains_open_end() {
+        let bounds = Bounds::new(Some(100), None);
+        assert!(!bounds.contains(99));
+        assert!(bounds.contains(100));
+        assert!(bounds.contains(i64::MAX));
+    }
+
+    #[test]
+    fn bounds_contains_fully_open() {
+        let bounds = Bounds::new(None, None);
+        assert!(bounds.contains(i64::MIN));
+        assert!(bounds.contains(0));
+        assert!(bounds.contains(i64::MAX));
+    }
+
+    #[test]
+    fn bounds_intersect_overlapping_ranges() {
+        let a = Bounds::new(Some(100), Some(300));
+        let b = Bounds::new(Some(200), Some(400));
+        let result = a.intersect(b);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.start, Some(200));
+        assert_eq!(r.end, Some(300));
+    }
+
+    #[test]
+    fn bounds_intersect_no_overlap() {
+        let a = Bounds::new(Some(100), Some(200));
+        let b = Bounds::new(Some(300), Some(400));
+        let result = a.intersect(b);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn bounds_intersect_touching_boundary() {
+        let a = Bounds::new(Some(100), Some(200));
+        let b = Bounds::new(Some(200), Some(300));
+        let result = a.intersect(b);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.start, Some(200));
+        assert_eq!(r.end, Some(200));
+    }
+
+    #[test]
+    fn bounds_intersect_one_open_start() {
+        let a = Bounds::new(None, Some(300));
+        let b = Bounds::new(Some(200), Some(400));
+        let result = a.intersect(b);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.start, Some(200));
+        assert_eq!(r.end, Some(300));
+    }
+
+    #[test]
+    fn bounds_intersect_both_fully_open() {
+        let a = Bounds::new(None, None);
+        let b = Bounds::new(None, None);
+        let result = a.intersect(b);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.start, None);
+        assert_eq!(r.end, None);
+    }
+
+    #[test]
+    fn bounds_overlaps_true_case() {
+        let bounds = Bounds::new(Some(100), Some(300));
+        assert!(bounds.overlaps(200, 400)); // partial overlap
+        assert!(bounds.overlaps(50, 150));  // partial overlap
+        assert!(bounds.overlaps(150, 250)); // fully inside
+        assert!(bounds.overlaps(50, 400));  // fully enclosing
+        assert!(bounds.overlaps(100, 300)); // exact match
+    }
+
+    #[test]
+    fn bounds_overlaps_false_case() {
+        let bounds = Bounds::new(Some(100), Some(200));
+        assert!(!bounds.overlaps(201, 300));
+        assert!(!bounds.overlaps(50, 99));
+    }
+
+    #[test]
+    fn bounds_overlaps_swapped_range() {
+        // overlaps normalizes the range (start > end)
+        let bounds = Bounds::new(Some(100), Some(200));
+        assert!(bounds.overlaps(150, 130)); // swapped, but should still overlap
+    }
+
+    #[test]
+    fn bounds_overlaps_open_bounds() {
+        let bounds = Bounds::new(None, None);
+        assert!(bounds.overlaps(0, 1000));
+        assert!(bounds.overlaps(i64::MIN, i64::MAX));
+    }
+
+    #[test]
+    fn last_day_in_month_february_non_leap() {
+        let date = last_day_in_month(2023, time::Month::February);
+        assert_eq!(date.day(), 28);
+    }
+
+    #[test]
+    fn last_day_in_month_february_leap() {
+        let date = last_day_in_month(2024, time::Month::February);
+        assert_eq!(date.day(), 29);
+    }
+
+    #[test]
+    fn last_day_in_month_december() {
+        let date = last_day_in_month(2024, time::Month::December);
+        assert_eq!(date.day(), 31);
+    }
+
+    #[test]
+    fn last_day_in_month_april() {
+        let date = last_day_in_month(2024, time::Month::April);
+        assert_eq!(date.day(), 30);
+    }
+
+    #[test]
+    fn date_to_timestamp_epoch() {
+        let date = Date::from_calendar_date(1970, time::Month::January, 1).unwrap();
+        assert_eq!(date_to_timestamp(date), 0);
+    }
+
+    #[test]
+    fn date_to_timestamp_known_date() {
+        // 2024-01-01 midnight UTC = 1704067200
+        let date = Date::from_calendar_date(2024, time::Month::January, 1).unwrap();
+        assert_eq!(date_to_timestamp(date), 1704067200);
+    }
+
+    #[test]
+    fn parse_utc_offset_none_returns_utc() {
+        let offset = parse_utc_offset(None).unwrap();
+        assert_eq!(offset, UtcOffset::UTC);
+    }
+
+    #[test]
+    fn parse_utc_offset_utc_string() {
+        let offset = parse_utc_offset(Some("UTC")).unwrap();
+        assert_eq!(offset, UtcOffset::UTC);
+    }
+
+    #[test]
+    fn parse_utc_offset_z_string() {
+        let offset = parse_utc_offset(Some("Z")).unwrap();
+        assert_eq!(offset, UtcOffset::UTC);
+    }
+
+    #[test]
+    fn parse_utc_offset_positive_hours() {
+        let offset = parse_utc_offset(Some("+05")).unwrap();
+        assert_eq!(offset.whole_hours(), 5);
+    }
+
+    #[test]
+    fn parse_utc_offset_negative_hours_minutes() {
+        let offset = parse_utc_offset(Some("-0530")).unwrap();
+        assert_eq!(offset.whole_hours(), -5);
+        assert_eq!(offset.minutes_past_hour(), -30);
+    }
+
+    #[test]
+    fn parse_utc_offset_invalid_returns_error() {
+        let result = parse_utc_offset(Some("invalid_tz"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_utc_offset_empty_returns_utc() {
+        let offset = parse_utc_offset(Some("")).unwrap();
+        assert_eq!(offset, UtcOffset::UTC);
+    }
 }
