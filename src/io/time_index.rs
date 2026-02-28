@@ -164,11 +164,9 @@ mod tests {
         assert_eq!(entries[0].timestamp, 10); // sorted in place
         let read_entries = read_track(&mut file, offset, length).expect("read track");
         assert_eq!(read_entries.len(), 3);
-        assert!(
-            read_entries
-                .windows(2)
-                .all(|w| w[0].timestamp <= w[1].timestamp)
-        );
+        assert!(read_entries
+            .windows(2)
+            .all(|w| w[0].timestamp <= w[1].timestamp));
 
         let expected_checksum = calculate_checksum(&read_entries);
         assert_eq!(checksum, expected_checksum);
@@ -201,5 +199,56 @@ mod tests {
         let checksum_a = calculate_checksum(&entries);
         let checksum_b = calculate_checksum(&entries);
         assert_eq!(checksum_a, checksum_b);
+    }
+
+    #[test]
+    fn time_index_entry_new_stores_correct_values() {
+        let entry = TimeIndexEntry::new(1_700_000_000, 42);
+        assert_eq!(entry.timestamp, 1_700_000_000);
+        assert_eq!(entry.frame_id, 42);
+    }
+
+    #[test]
+    fn append_track_read_track_round_trip() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries = vec![
+            TimeIndexEntry::new(100, 1),
+            TimeIndexEntry::new(200, 2),
+            TimeIndexEntry::new(300, 3),
+        ];
+        let (offset, length, _checksum) =
+            append_track(&mut file, &mut entries).expect("append");
+        let read_back = read_track(&mut file, offset, length).expect("read");
+        assert_eq!(read_back.len(), 3);
+        assert_eq!(read_back[0], TimeIndexEntry::new(100, 1));
+        assert_eq!(read_back[1], TimeIndexEntry::new(200, 2));
+        assert_eq!(read_back[2], TimeIndexEntry::new(300, 3));
+    }
+
+    #[test]
+    fn different_data_produces_different_checksums() {
+        let entries_a = vec![
+            TimeIndexEntry::new(10, 1),
+            TimeIndexEntry::new(20, 2),
+        ];
+        let entries_b = vec![
+            TimeIndexEntry::new(30, 3),
+            TimeIndexEntry::new(40, 4),
+        ];
+        let checksum_a = calculate_checksum(&entries_a);
+        let checksum_b = calculate_checksum(&entries_b);
+        assert_ne!(checksum_a, checksum_b);
+    }
+
+    #[test]
+    fn empty_entries_round_trip() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries: Vec<TimeIndexEntry> = vec![];
+        let (offset, length, checksum) =
+            append_track(&mut file, &mut entries).expect("append empty");
+        let read_back = read_track(&mut file, offset, length).expect("read empty");
+        assert!(read_back.is_empty());
+        let expected_checksum = calculate_checksum(&[]);
+        assert_eq!(checksum, expected_checksum);
     }
 }

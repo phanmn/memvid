@@ -374,3 +374,140 @@ impl Default for PutManyOpts {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn put_options_builder_defaults() {
+        let opts = PutOptions::builder().build();
+        assert!(opts.auto_tag);
+        assert!(opts.extract_dates);
+        assert!(opts.extract_triplets);
+        assert!(!opts.enable_embedding);
+        assert!(opts.timestamp.is_none());
+        assert!(opts.uri.is_none());
+        assert!(opts.title.is_none());
+        assert!(opts.tags.is_empty());
+        assert!(opts.labels.is_empty());
+        assert!(opts.extra_metadata.is_empty());
+        assert_eq!(opts.role, FrameRole::Document);
+        assert!(opts.instant_index);
+    }
+
+    #[test]
+    fn put_options_builder_uri() {
+        let opts = PutOptions::builder()
+            .uri("https://example.com/doc")
+            .build();
+        assert_eq!(opts.uri.as_deref(), Some("https://example.com/doc"));
+    }
+
+    #[test]
+    fn put_options_builder_title() {
+        let opts = PutOptions::builder()
+            .title("My Document")
+            .build();
+        assert_eq!(opts.title.as_deref(), Some("My Document"));
+    }
+
+    #[test]
+    fn put_options_builder_tag() {
+        let opts = PutOptions::builder()
+            .tag("color", "blue")
+            .build();
+        assert!(opts.tags.contains(&"color".to_string()));
+        assert_eq!(opts.extra_metadata.get("color"), Some(&"blue".to_string()));
+    }
+
+    #[test]
+    fn put_options_builder_label() {
+        let opts = PutOptions::builder()
+            .label("important")
+            .build();
+        assert_eq!(opts.labels, vec!["important".to_string()]);
+    }
+
+    #[test]
+    fn put_options_builder_auto_tag_disabled() {
+        let opts = PutOptions::builder()
+            .auto_tag(false)
+            .build();
+        assert!(!opts.auto_tag);
+    }
+
+    #[test]
+    fn put_options_builder_extract_dates_disabled() {
+        let opts = PutOptions::builder()
+            .extract_dates(false)
+            .build();
+        assert!(!opts.extract_dates);
+    }
+
+    #[test]
+    fn put_options_builder_push_tag_multiple() {
+        let opts = PutOptions::builder()
+            .push_tag("rust")
+            .push_tag("memvid")
+            .push_tag("testing")
+            .build();
+        assert_eq!(opts.tags.len(), 3);
+        assert_eq!(opts.tags[0], "rust");
+        assert_eq!(opts.tags[1], "memvid");
+        assert_eq!(opts.tags[2], "testing");
+    }
+
+    #[test]
+    fn put_options_builder_timestamp() {
+        let opts = PutOptions::builder()
+            .timestamp(1_700_000_000)
+            .build();
+        assert_eq!(opts.timestamp, Some(1_700_000_000));
+    }
+
+    #[test]
+    fn put_options_builder_role() {
+        let opts = PutOptions::builder()
+            .role(FrameRole::DocumentChunk)
+            .build();
+        assert_eq!(opts.role, FrameRole::DocumentChunk);
+    }
+
+    #[test]
+    fn put_options_builder_chaining() {
+        let opts = PutOptions::builder()
+            .uri("file:///test.pdf")
+            .title("Test PDF")
+            .push_tag("pdf")
+            .label("documents")
+            .auto_tag(false)
+            .extract_dates(false)
+            .timestamp(42)
+            .role(FrameRole::ExtractedImage)
+            .build();
+
+        assert_eq!(opts.uri.as_deref(), Some("file:///test.pdf"));
+        assert_eq!(opts.title.as_deref(), Some("Test PDF"));
+        assert_eq!(opts.tags, vec!["pdf".to_string()]);
+        assert_eq!(opts.labels, vec!["documents".to_string()]);
+        assert!(!opts.auto_tag);
+        assert!(!opts.extract_dates);
+        assert_eq!(opts.timestamp, Some(42));
+        assert_eq!(opts.role, FrameRole::ExtractedImage);
+    }
+
+    #[test]
+    fn put_many_opts_default_values() {
+        let opts = PutManyOpts::default();
+        assert_eq!(opts.compression_level, 3);
+        assert!(opts.disable_auto_checkpoint);
+        assert!(!opts.skip_sync);
+        assert!(!opts.enable_embedding);
+        assert!(!opts.auto_tag);
+        assert!(!opts.extract_dates);
+        assert!(opts.no_raw);
+        assert!(opts.enable_enrichment);
+        assert_eq!(opts.wal_pre_size_bytes, 0);
+    }
+}

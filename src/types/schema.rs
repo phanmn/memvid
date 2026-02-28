@@ -521,18 +521,14 @@ mod tests {
         assert!(ValueType::Boolean.matches("true"));
         assert!(ValueType::Boolean.matches("false"));
         assert!(!ValueType::Boolean.matches("maybe"));
-        assert!(
-            ValueType::Enum {
-                values: vec!["a".to_string(), "b".to_string()]
-            }
-            .matches("A")
-        );
-        assert!(
-            !ValueType::Enum {
-                values: vec!["a".to_string(), "b".to_string()]
-            }
-            .matches("c")
-        );
+        assert!(ValueType::Enum {
+            values: vec!["a".to_string(), "b".to_string()]
+        }
+        .matches("A"));
+        assert!(!ValueType::Enum {
+            values: vec!["a".to_string(), "b".to_string()]
+        }
+        .matches("c"));
     }
 
     #[test]
@@ -557,16 +553,12 @@ mod tests {
         assert!(registry.contains("age"));
 
         // Validate against built-in
-        assert!(
-            registry
-                .validate("age", "25", Some(EntityKind::Person))
-                .is_ok()
-        );
-        assert!(
-            registry
-                .validate("age", "abc", Some(EntityKind::Person))
-                .is_err()
-        );
+        assert!(registry
+            .validate("age", "25", Some(EntityKind::Person))
+            .is_ok());
+        assert!(registry
+            .validate("age", "abc", Some(EntityKind::Person))
+            .is_err());
     }
 
     #[test]
@@ -588,5 +580,107 @@ mod tests {
         let values = vec!["true", "false", "true"];
         let schema = registry.infer_from_values("active", &values);
         assert_eq!(schema.range, ValueType::Boolean);
+    }
+
+    #[test]
+    fn schema_registry_new_has_builtin_predicates() {
+        let registry = SchemaRegistry::new();
+        // Verify several built-in predicates exist
+        assert!(registry.contains("employer"));
+        assert!(registry.contains("workplace"));
+        assert!(registry.contains("job_title"));
+        assert!(registry.contains("location"));
+        assert!(registry.contains("city"));
+        assert!(registry.contains("country"));
+        assert!(registry.contains("spouse"));
+        assert!(registry.contains("likes"));
+        assert!(registry.contains("dislikes"));
+        assert!(registry.contains("age"));
+        assert!(registry.contains("birthday"));
+        assert!(registry.contains("email"));
+        assert!(registry.contains("pet"));
+
+        // Verify builtins are marked as built-in
+        let employer = registry.get("employer").unwrap();
+        assert!(employer.builtin);
+    }
+
+    #[test]
+    fn schema_registry_empty_has_no_builtins() {
+        let registry = SchemaRegistry::empty();
+        assert!(!registry.contains("employer"));
+        assert!(!registry.contains("age"));
+        assert!(!registry.contains("location"));
+        assert!(registry.all().next().is_none() || registry.all().count() == 0);
+    }
+
+    #[test]
+    fn schema_registry_register_custom_predicate() {
+        let mut registry = SchemaRegistry::empty();
+        assert!(!registry.contains("custom_field"));
+
+        registry.register(
+            PredicateSchema::new("custom_field", "Custom Field")
+                .with_range(ValueType::Number),
+        );
+
+        assert!(registry.contains("custom_field"));
+        let schema = registry.get("custom_field").unwrap();
+        assert_eq!(schema.name, "Custom Field");
+        assert_eq!(schema.range, ValueType::Number);
+        assert!(!schema.builtin);
+    }
+
+    #[test]
+    fn value_type_matches_string() {
+        assert!(ValueType::String.matches("anything"));
+        assert!(ValueType::String.matches(""));
+        assert!(ValueType::String.matches("123"));
+    }
+
+    #[test]
+    fn value_type_matches_number() {
+        assert!(ValueType::Number.matches("42"));
+        assert!(ValueType::Number.matches("3.14"));
+        assert!(ValueType::Number.matches("-99"));
+        assert!(ValueType::Number.matches("0"));
+        assert!(!ValueType::Number.matches("abc"));
+        assert!(!ValueType::Number.matches(""));
+    }
+
+    #[test]
+    fn validate_strict_registry_unknown_predicate_errors() {
+        let registry = SchemaRegistry::empty().strict();
+        let result = registry.validate("nonexistent", "value", None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            SchemaError::UnknownPredicate(pred) => assert_eq!(pred, "nonexistent"),
+            other => panic!("expected UnknownPredicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn validate_non_strict_registry_allows_unknown_predicate() {
+        let registry = SchemaRegistry::empty();
+        let result = registry.validate("nonexistent", "value", None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn predicate_schema_builder_methods() {
+        let schema = PredicateSchema::new("test_pred", "Test Predicate")
+            .with_domain(vec![EntityKind::Person, EntityKind::Organization])
+            .with_range(ValueType::Boolean)
+            .multiple()
+            .with_inverse("inverse_pred")
+            .builtin();
+
+        assert_eq!(schema.id, "test_pred");
+        assert_eq!(schema.name, "Test Predicate");
+        assert_eq!(schema.domain.len(), 2);
+        assert_eq!(schema.range, ValueType::Boolean);
+        assert_eq!(schema.cardinality, Cardinality::Multiple);
+        assert_eq!(schema.inverse, Some("inverse_pred".to_string()));
+        assert!(schema.builtin);
     }
 }
