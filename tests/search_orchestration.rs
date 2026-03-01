@@ -3,8 +3,6 @@
 use memvid_core::{AclEnforcementMode, Memvid, PutOptions, SearchRequest};
 use tempfile::TempDir;
 
-static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 /// Create a populated memory file with lex indexing enabled.
 fn create_and_populate(dir: &TempDir) -> std::path::PathBuf {
     let path = dir.path().join("search_test.mv2");
@@ -60,7 +58,7 @@ fn search_request(query: &str, top_k: usize) -> SearchRequest {
 #[test]
 #[cfg(feature = "lex")]
 fn search_finds_relevant_document() {
-    let _lock = SERIAL.lock().unwrap();
+
     let dir = TempDir::new().unwrap();
     let path = create_and_populate(&dir);
 
@@ -72,7 +70,7 @@ fn search_finds_relevant_document() {
 #[test]
 #[cfg(feature = "lex")]
 fn search_respects_limit() {
-    let _lock = SERIAL.lock().unwrap();
+
     let dir = TempDir::new().unwrap();
     let path = create_and_populate(&dir);
 
@@ -84,7 +82,7 @@ fn search_respects_limit() {
 #[test]
 #[cfg(feature = "lex")]
 fn search_no_results_for_unrelated_query() {
-    let _lock = SERIAL.lock().unwrap();
+
     let dir = TempDir::new().unwrap();
     let path = create_and_populate(&dir);
 
@@ -98,7 +96,7 @@ fn search_no_results_for_unrelated_query() {
 #[test]
 #[cfg(feature = "lex")]
 fn search_after_delete_excludes_deleted() {
-    let _lock = SERIAL.lock().unwrap();
+
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("delete_search.mv2");
 

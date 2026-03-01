@@ -3,8 +3,6 @@
 use memvid_core::{FrameRole, FrameStatus, Memvid, PutOptions};
 use tempfile::TempDir;
 
-static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 fn create_temp_memvid() -> (TempDir, Memvid) {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("test.mv2");
@@ -14,7 +12,7 @@ fn create_temp_memvid() -> (TempDir, Memvid) {
 
 #[test]
 fn put_bytes_returns_frame_id() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     let opts = PutOptions::builder()
         .uri("test://hello")
@@ -31,7 +29,7 @@ fn put_bytes_returns_frame_id() {
 
 #[test]
 fn put_bytes_with_options_tags() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     let opts = PutOptions::builder()
         .uri("test://tagged")
@@ -51,7 +49,7 @@ fn put_bytes_with_options_tags() {
 
 #[test]
 fn multiple_puts_then_commit() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     let id1 = mem.put_bytes(b"First document").unwrap();
     let id2 = mem.put_bytes(b"Second document").unwrap();
@@ -64,7 +62,7 @@ fn multiple_puts_then_commit() {
 
 #[test]
 fn delete_frame_marks_tombstone() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     let opts = PutOptions {
         uri: Some("mv2://delete-test".to_string()),
@@ -92,14 +90,14 @@ fn delete_frame_marks_tombstone() {
 
 #[test]
 fn commit_empty_succeeds() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     mem.commit().unwrap();
 }
 
 #[test]
 fn put_with_role() {
-    let _lock = SERIAL.lock().unwrap();
+
     let (_dir, mut mem) = create_temp_memvid();
     let opts = PutOptions::builder()
         .uri("test://doc-role")

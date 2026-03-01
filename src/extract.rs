@@ -1002,8 +1002,16 @@ mod infrastructure_tests {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("does_not_exist.txt");
         let processor = DocumentProcessor::new(ProcessorConfig::default());
-        let result = processor.extract_from_path(&missing);
-        assert!(result.is_err());
+        let err = processor.extract_from_path(&missing).unwrap_err();
+        match &err {
+            crate::error::MemvidError::ExtractionFailed { reason } => {
+                assert!(
+                    reason.contains("failed to read file"),
+                    "expected file-read error, got: {reason}"
+                );
+            }
+            other => panic!("expected ExtractionFailed, got: {other:?}"),
+        }
     }
 }
 

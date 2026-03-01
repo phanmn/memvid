@@ -2,7 +2,7 @@
 
 > Required: follow the documented task execution workflow to implement this plan step-by-step.
 
-**Goal:** Add ~75 unit tests and 5 integration tests to cover all 64 untested source files in the memvid codebase.
+**Goal:** Add ~150 unit tests and 2 integration test files to cover 24 previously untested source files in the memvid codebase.
 
 **Architecture:** Inline `#[cfg(test)]` modules for unit tests in each source file, plus standalone integration test files in `tests/`. Tests verify round-trip correctness, error handling, and edge cases. External services (CLIP, Whisper, API embeddings) are mocked.
 
@@ -2381,7 +2381,7 @@ git commit -m "test: add integration tests for search orchestration"
 **Step 1: Run all tests**
 
 Run: `cargo test`
-Expected: All tests PASS (existing 498 + ~80 new)
+Expected: All tests PASS (existing ~450 + ~150 new ≈ 600+)
 
 **Step 2: Run clippy**
 
