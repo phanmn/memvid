@@ -1005,9 +1005,14 @@ mod infrastructure_tests {
         let err = processor.extract_from_path(&missing).unwrap_err();
         match &err {
             crate::error::MemvidError::ExtractionFailed { reason } => {
+                // The non-extractous path wraps with "failed to read file";
+                // the extractous path may return the OS message directly.
+                let r = reason.to_lowercase();
                 assert!(
-                    reason.contains("failed to read file"),
-                    "expected file-read error, got: {reason}"
+                    r.contains("failed to read file")
+                        || r.contains("no such file")
+                        || r.contains("not found"),
+                    "expected file-not-found error, got: {reason}"
                 );
             }
             other => panic!("expected ExtractionFailed, got: {other:?}"),

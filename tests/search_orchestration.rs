@@ -90,7 +90,7 @@ fn search_no_results_for_unrelated_query() {
     let results = mem
         .search(search_request("quantum physics supercollider", 10))
         .unwrap();
-    let _ = results;
+    assert!(results.hits.is_empty(), "unrelated query should return no hits");
 }
 
 #[test]
