@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
-use quick_xml::Reader as XmlReader;
 use quick_xml::events::Event;
+use quick_xml::Reader as XmlReader;
 use zip::ZipArchive;
 
 use crate::{
@@ -122,4 +122,124 @@ fn extract_plain_text(xml: &str, block_tag: &[u8]) -> String {
     }
 
     text.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn docx_reader_name() {
+        let reader = DocxReader;
+        assert_eq!(reader.name(), "docx");
+    }
+
+    #[test]
+    fn supports_correct_mime_type() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            None,
+        );
+        assert!(reader.supports(&hint));
+    }
+
+    #[test]
+    fn supports_document_format_docx() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Docx));
+        assert!(reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_pdf_mime_type() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(Some("application/pdf"), None);
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_pptx_mime_type() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(
+            Some("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            None,
+        );
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn rejects_plain_text_format() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::PlainText));
+        assert!(!reader.supports(&hint));
+    }
+
+    #[test]
+    fn invalid_bytes_returns_error_or_fallback() {
+        let reader = DocxReader;
+        let hint = ReaderHint::new(None, Some(DocumentFormat::Docx));
+        // Not a valid zip/docx - extract_text will fail, then fallback to PassthroughReader
+        // which may also fail on garbage bytes. Either way we should not panic.
+        let result = reader.extract(b"this is not a docx file", &hint);
+        // The extract method falls back to PassthroughReader on error, so it may
+        // succeed with empty/garbage text or fail. The key assertion is no panic.
+        match result {
+            Ok(output) => {
+                assert_eq!(output.reader_name, "docx");
+                assert!(output.diagnostics.fallback);
+            }
+            Err(_) => {
+                // Also acceptable - extraction failed for invalid data
+            }
+        }
+    }
+
+    #[test]
+    fn extract_plain_text_from_sample_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Hello World</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>Second paragraph</w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>"#;
+        let result = extract_plain_text(xml, b"w:p");
+        assert!(result.contains("Hello World"), "should contain 'Hello World', got: {result}");
+        assert!(
+            result.contains("Second paragraph"),
+            "should contain 'Second paragraph', got: {result}"
+        );
+    }
+
+    #[test]
+    fn extract_plain_text_empty_xml() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body></w:body>
+</w:document>"#;
+        let result = extract_plain_text(xml, b"w:p");
+        assert!(result.is_empty(), "empty document should produce empty text, got: {result}");
+    }
+
+    #[test]
+    fn extract_plain_text_with_whitespace_only() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r><w:t>   </w:t></w:r>
+    </w:p>
+  </w:body>
+</w:document>"#;
+        let result = extract_plain_text(xml, b"w:p");
+        assert!(
+            result.is_empty(),
+            "whitespace-only content should be trimmed to empty, got: {result}"
+        );
+    }
 }

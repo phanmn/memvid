@@ -75,14 +75,32 @@ pub enum Tier {
 
 impl Tier {
     /// Maximum nominal capacity in bytes for the tier.
+    ///
+    /// Can be overridden at runtime via the `MEMVID_FREE_CAPACITY_BYTES`,
+    /// `MEMVID_DEV_CAPACITY_BYTES`, or `MEMVID_ENTERPRISE_CAPACITY_BYTES`
+    /// environment variables respectively.
     #[must_use]
     pub fn capacity_bytes(self) -> u64 {
         match self {
-            Tier::Free => 50 * 1024 * 1024,              // 50 MB
-            Tier::Dev => 2 * 1024 * 1024 * 1024,         // 2 GB
-            Tier::Enterprise => 10 * 1024 * 1024 * 1024, // 10 GB
+            Tier::Free => env_capacity("MEMVID_FREE_CAPACITY_BYTES", 5 * 1024 * 1024 * 1024), // 5 GB
+            Tier::Dev => env_capacity("MEMVID_DEV_CAPACITY_BYTES", 20 * 1024 * 1024 * 1024), // 20 GB
+            Tier::Enterprise => {
+                env_capacity("MEMVID_ENTERPRISE_CAPACITY_BYTES", 100 * 1024 * 1024 * 1024)
+            } // 100 GB
         }
     }
+}
+
+/// Read a capacity override from an environment variable, falling back to `default`.
+fn env_capacity(var: &str, default: u64) -> u64 {
+    std::env::var(var)
+        .ok()
+        .and_then(|v| parse_capacity_override(&v))
+        .unwrap_or(default)
+}
+
+fn parse_capacity_override(raw: &str) -> Option<u64> {
+    raw.trim().parse::<u64>().ok().filter(|&value| value > 0)
 }
 
 /// Marker type signifying an open (mutable) memory.
@@ -166,4 +184,123 @@ pub struct EnrichmentTask {
     pub chunks_done: u32,
     /// Total chunks to embed (0 if not yet known).
     pub chunks_total: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_capacity_override_accepts_valid_values() {
+        assert_eq!(parse_capacity_override("1"), Some(1));
+        assert_eq!(parse_capacity_override("  2048  "), Some(2048));
+    }
+
+    #[test]
+    fn parse_capacity_override_rejects_invalid_values() {
+        assert_eq!(parse_capacity_override(""), None);
+        assert_eq!(parse_capacity_override("0"), None);
+        assert_eq!(parse_capacity_override("-1"), None);
+        assert_eq!(parse_capacity_override("not-a-number"), None);
+    }
+
+    #[test]
+    fn env_capacity_uses_default_when_var_is_missing() {
+        // Use a unique key that cannot collide with real env vars.
+        let key = format!(
+            "MEMVID_TEST_MISSING_{:?}_{:x}",
+            std::thread::current().id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        assert_eq!(env_capacity(&key, 4096), 4096);
+    }
+
+    #[test]
+    fn canonical_encoding_from_byte_round_trips() {
+        assert_eq!(CanonicalEncoding::from_byte(0), CanonicalEncoding::Plain);
+        assert_eq!(CanonicalEncoding::from_byte(1), CanonicalEncoding::Zstd);
+        assert_eq!(CanonicalEncoding::Plain.as_byte(), 0);
+        assert_eq!(CanonicalEncoding::Zstd.as_byte(), 1);
+        // Round-trip
+        assert_eq!(
+            CanonicalEncoding::from_byte(CanonicalEncoding::Plain.as_byte()),
+            CanonicalEncoding::Plain
+        );
+        assert_eq!(
+            CanonicalEncoding::from_byte(CanonicalEncoding::Zstd.as_byte()),
+            CanonicalEncoding::Zstd
+        );
+    }
+
+    #[test]
+    fn canonical_encoding_unknown_byte_defaults_to_plain() {
+        assert_eq!(CanonicalEncoding::from_byte(2), CanonicalEncoding::Plain);
+        assert_eq!(CanonicalEncoding::from_byte(42), CanonicalEncoding::Plain);
+        assert_eq!(CanonicalEncoding::from_byte(255), CanonicalEncoding::Plain);
+    }
+
+    #[test]
+    fn tier_capacity_bytes_are_non_zero() {
+        // capacity_bytes() reads env vars, so exact values depend on the
+        // environment. We only assert the invariant that always holds:
+        // every tier must return a positive capacity.
+        assert!(Tier::Free.capacity_bytes() > 0);
+        assert!(Tier::Dev.capacity_bytes() > 0);
+        assert!(Tier::Enterprise.capacity_bytes() > 0);
+    }
+
+    #[test]
+    fn tier_default_capacities_are_ordered() {
+        // Test the hardcoded defaults directly via env_capacity with
+        // guaranteed-missing keys, avoiding unsafe env mutation.
+        let free = env_capacity("_MEMVID_TEST_FREE_NONEXISTENT", 5 * 1024 * 1024 * 1024);
+        let dev = env_capacity("_MEMVID_TEST_DEV_NONEXISTENT", 20 * 1024 * 1024 * 1024);
+        let enterprise = env_capacity("_MEMVID_TEST_ENT_NONEXISTENT", 100 * 1024 * 1024 * 1024);
+        assert!(enterprise >= dev, "Enterprise default must be >= Dev");
+        assert!(dev >= free, "Dev default must be >= Free");
+    }
+
+    #[test]
+    fn frame_status_variants_are_distinct() {
+        let active = FrameStatus::Active;
+        let superseded = FrameStatus::Superseded;
+        let deleted = FrameStatus::Deleted;
+        assert_ne!(active, superseded);
+        assert_ne!(active, deleted);
+        assert_ne!(superseded, deleted);
+    }
+
+    #[test]
+    fn frame_status_default_is_active() {
+        assert_eq!(FrameStatus::default(), FrameStatus::Active);
+    }
+
+    #[test]
+    fn enrichment_state_needs_enrichment_logic() {
+        let searchable = EnrichmentState::Searchable;
+        let enriched = EnrichmentState::Enriched;
+        assert!(searchable.needs_enrichment());
+        assert!(!enriched.needs_enrichment());
+    }
+
+    #[test]
+    fn enrichment_state_has_embeddings_logic() {
+        let searchable = EnrichmentState::Searchable;
+        let enriched = EnrichmentState::Enriched;
+        assert!(!searchable.has_embeddings());
+        assert!(enriched.has_embeddings());
+    }
+
+    #[test]
+    fn enrichment_state_default_is_searchable() {
+        assert_eq!(EnrichmentState::default(), EnrichmentState::Searchable);
+    }
+
+    #[test]
+    fn frame_role_default_is_document() {
+        assert_eq!(FrameRole::default(), FrameRole::Document);
+    }
 }

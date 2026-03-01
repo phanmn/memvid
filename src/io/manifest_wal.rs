@@ -20,13 +20,13 @@ use std::{
 use bincode::serde::{decode_from_slice, encode_to_vec};
 use blake3::hash;
 
-use crate::{Result, error::MemvidError, types::IndexSegmentRef};
+use crate::{error::MemvidError, types::IndexSegmentRef, Result};
 
 const FILE_MAGIC: [u8; 8] = *b"MVSGWAL1";
 const FILE_VERSION: u32 = 1;
 const FILE_HEADER_SIZE: usize = FILE_MAGIC.len() + 4;
 const RECORD_HEADER_SIZE: usize = 4 + 32; // length (u32) + checksum
-const MAX_RECORD_BYTES: usize = 4 * 1024 * 1024; // 4 MiB segments metadata upper bound
+const MAX_RECORD_BYTES: usize = 16 * 1024 * 1024; // 16 MiB segments metadata upper bound
 
 fn wal_config() -> impl bincode::config::Config {
     bincode::config::standard()
@@ -101,7 +101,7 @@ impl ManifestWal {
 
         let checksum = hash(&payload);
         self.file.seek(SeekFrom::Start(self.write_offset))?;
-        // Safe: validated payload.len() <= MAX_RECORD_BYTES (4MB) on line 96
+        // Safe: validated payload.len() <= MAX_RECORD_BYTES (16 MiB) on line 96
         self.file
             .write_all(&(u32::try_from(payload.len()).unwrap_or(u32::MAX)).to_le_bytes())?;
         self.file.write_all(checksum.as_bytes())?;
@@ -195,7 +195,7 @@ impl ManifestWal {
                 break;
             }
 
-            // Safe: validated payload_len <= MAX_RECORD_BYTES (4MB) on line 184
+            // Safe: validated payload_len <= MAX_RECORD_BYTES (16 MiB) on line 186
             let mut payload = vec![0u8; payload_len as usize];
             if let Err(err) = self.file.read_exact(&mut payload) {
                 if err.kind() == ErrorKind::UnexpectedEof {
@@ -295,6 +295,61 @@ mod tests {
         let wal = ManifestWal::open(&path)?;
         let entries = wal.replay()?;
         assert!(entries.is_empty(), "partial record should be dropped");
+        Ok(())
+    }
+
+    #[test]
+    fn open_creates_file() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("new_wal.mv2");
+        assert!(!path.exists());
+        let _wal = ManifestWal::open(&path)?;
+        assert!(path.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn append_segments_replay_round_trip() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("wal_rt.mv2");
+        let segments = vec![sample_segment(10), sample_segment(20), sample_segment(30)];
+        {
+            let mut wal = ManifestWal::open(&path)?;
+            wal.append_segments(&segments)?;
+            wal.flush()?;
+        }
+        // Re-open and replay
+        let wal = ManifestWal::open(&path)?;
+        let replayed = wal.replay()?;
+        assert_eq!(replayed.len(), 3);
+        assert_eq!(replayed[0].common.segment_id, 10);
+        assert_eq!(replayed[1].common.segment_id, 20);
+        assert_eq!(replayed[2].common.segment_id, 30);
+        Ok(())
+    }
+
+    #[test]
+    fn truncate_clears_entries() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("wal_truncate.mv2");
+        {
+            let mut wal = ManifestWal::open(&path)?;
+            wal.append_segments(&[sample_segment(1), sample_segment(2)])?;
+            wal.flush()?;
+
+            // Verify entries exist
+            let before = wal.replay()?;
+            assert_eq!(before.len(), 2);
+
+            // Truncate
+            wal.truncate()?;
+            let after = wal.replay()?;
+            assert!(after.is_empty(), "entries should be cleared after truncate");
+        }
+        // Re-open and verify truncation persisted
+        let wal = ManifestWal::open(&path)?;
+        let entries = wal.replay()?;
+        assert!(entries.is_empty(), "truncation should persist across re-open");
         Ok(())
     }
 }

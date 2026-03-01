@@ -215,11 +215,9 @@ mod tests {
         let mut cursor = Cursor::new(encoded.to_vec());
         HeaderCodec::read(&mut cursor).expect("read header with legacy metadata");
         let sanitized = cursor.into_inner();
-        assert!(
-            sanitized[LEGACY_LOCK_REGION_START..LEGACY_LOCK_REGION_END]
-                .iter()
-                .all(|byte| *byte == 0)
-        );
+        assert!(sanitized[LEGACY_LOCK_REGION_START..LEGACY_LOCK_REGION_END]
+            .iter()
+            .all(|byte| *byte == 0));
     }
 
     #[test]
@@ -245,5 +243,70 @@ mod tests {
         encoded[VERSION_OFFSET] = 0xFF;
         let err = HeaderCodec::decode(&encoded).expect_err("decode should fail");
         matches!(err, MemvidError::InvalidHeader { .. });
+    }
+
+    #[test]
+    fn encode_decode_round_trip_preserves_all_fields() {
+        let header = Header {
+            magic: MAGIC,
+            version: EXPECTED_VERSION,
+            footer_offset: 999_999,
+            wal_offset: WAL_OFFSET,
+            wal_size: 8 * 1024 * 1024,
+            wal_checkpoint_pos: 12345,
+            wal_sequence: 77,
+            toc_checksum: [0xCD; 32],
+        };
+        let encoded = HeaderCodec::encode(&header).expect("encode");
+        let decoded = HeaderCodec::decode(&encoded).expect("decode");
+        assert_eq!(decoded.magic, header.magic);
+        assert_eq!(decoded.version, header.version);
+        assert_eq!(decoded.footer_offset, header.footer_offset);
+        assert_eq!(decoded.wal_offset, header.wal_offset);
+        assert_eq!(decoded.wal_size, header.wal_size);
+        assert_eq!(decoded.wal_checkpoint_pos, header.wal_checkpoint_pos);
+        assert_eq!(decoded.wal_sequence, header.wal_sequence);
+        assert_eq!(decoded.toc_checksum, header.toc_checksum);
+    }
+
+    #[test]
+    fn write_read_round_trip_using_cursor() {
+        let header = Header {
+            magic: MAGIC,
+            version: EXPECTED_VERSION,
+            footer_offset: 2_000_000,
+            wal_offset: WAL_OFFSET,
+            wal_size: 16 * 1024 * 1024,
+            wal_checkpoint_pos: 500,
+            wal_sequence: 100,
+            toc_checksum: [0x11; 32],
+        };
+        let mut cursor = Cursor::new(vec![0u8; HEADER_SIZE]);
+        HeaderCodec::write(&mut cursor, &header).expect("write");
+        let decoded = HeaderCodec::read(&mut cursor).expect("read");
+        assert_eq!(decoded.footer_offset, 2_000_000);
+        assert_eq!(decoded.wal_size, 16 * 1024 * 1024);
+        assert_eq!(decoded.wal_checkpoint_pos, 500);
+        assert_eq!(decoded.wal_sequence, 100);
+        assert_eq!(decoded.toc_checksum, [0x11; 32]);
+    }
+
+    #[test]
+    fn invalid_magic_bytes_in_encoded_header_are_rejected() {
+        let header = sample_header();
+        let mut encoded = HeaderCodec::encode(&header).expect("encode");
+        // Corrupt magic bytes
+        encoded[0] = 0xFF;
+        encoded[1] = 0xFF;
+        encoded[2] = 0xFF;
+        encoded[3] = 0xFF;
+        let result = HeaderCodec::decode(&encoded);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MemvidError::InvalidHeader { reason } => {
+                assert!(reason.contains("magic"), "error should mention magic: {}", reason);
+            }
+            other => panic!("expected InvalidHeader, got {:?}", other),
+        }
     }
 }

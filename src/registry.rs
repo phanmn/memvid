@@ -10,8 +10,8 @@ use blake3::Hasher;
 use fs_err::{self as fs, File, OpenOptions};
 use same_file::Handle;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
 
 use crate::error::{LockOwnerHint, Result};
 
@@ -260,4 +260,92 @@ pub fn is_stale(record: &LockRecord, grace: Duration) -> bool {
 
 pub fn to_owner_hint(record: Option<LockRecord>) -> Option<LockOwnerHint> {
     record.map(|r| r.to_owner_hint())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Helper: create a real file inside a temp dir and return its path.
+    fn create_temp_file(dir: &TempDir, name: &str, content: &[u8]) -> PathBuf {
+        let path = dir.path().join(name);
+        let mut f = File::create(&path).unwrap();
+        f.write_all(content).unwrap();
+        f.flush().unwrap();
+        path
+    }
+
+    #[test]
+    fn compute_file_id_is_deterministic() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "test.mv2", b"hello world data");
+        let id1 = compute_file_id(&path).unwrap();
+        let id2 = compute_file_id(&path).unwrap();
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn file_id_display_is_non_empty() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "display.mv2", b"some content");
+        let id = compute_file_id(&path).unwrap();
+        let display = format!("{id}");
+        assert!(!display.is_empty());
+    }
+
+    #[test]
+    fn lock_record_new_creates_valid_record() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "record.mv2", b"data");
+        let file_id = compute_file_id(&path).unwrap();
+        let record = LockRecord::new(&file_id, &path, "test-cmd".to_string(), 2000).unwrap();
+        assert_eq!(record.pid, std::process::id());
+        assert_eq!(record.cmd, "test-cmd");
+        assert_eq!(record.heartbeat_ms, 2000);
+        assert!(!record.started_at.is_empty());
+        assert!(!record.last_heartbeat.is_empty());
+    }
+
+    #[test]
+    fn is_stale_returns_false_for_fresh_record() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "fresh.mv2", b"data");
+        let file_id = compute_file_id(&path).unwrap();
+        let record = LockRecord::new(&file_id, &path, "test".to_string(), 2000).unwrap();
+        // A just-created record should not be stale with a 60s grace period
+        assert!(!is_stale(&record, Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn write_read_remove_record_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "roundtrip.mv2", b"data");
+        let file_id = compute_file_id(&path).unwrap();
+        let record = LockRecord::new(&file_id, &path, "roundtrip-cmd".to_string(), 1000).unwrap();
+
+        // Write
+        write_record(&record).unwrap();
+
+        // Read back
+        let read_back = read_record(&file_id).unwrap();
+        assert!(read_back.is_some());
+        let read_back = read_back.unwrap();
+        assert_eq!(read_back.cmd, "roundtrip-cmd");
+        assert_eq!(read_back.pid, record.pid);
+        assert_eq!(read_back.file_id, record.file_id);
+
+        // Remove
+        remove_record(&file_id).unwrap();
+        let after_remove = read_record(&file_id).unwrap();
+        assert!(after_remove.is_none());
+    }
+
+    #[test]
+    fn file_id_as_str_matches_display() {
+        let dir = TempDir::new().unwrap();
+        let path = create_temp_file(&dir, "str_test.mv2", b"content");
+        let id = compute_file_id(&path).unwrap();
+        assert_eq!(id.as_str(), &format!("{id}"));
+    }
 }

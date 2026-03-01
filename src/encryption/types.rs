@@ -94,3 +94,70 @@ impl Mv2eHeader {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_encode_decode_round_trip() {
+        let header = Mv2eHeader {
+            magic: MV2E_MAGIC,
+            version: MV2E_VERSION,
+            kdf_algorithm: KdfAlgorithm::Argon2id,
+            cipher_algorithm: CipherAlgorithm::Aes256Gcm,
+            salt: [0xAA; SALT_SIZE],
+            nonce: [0xBB; NONCE_SIZE],
+            original_size: 123_456_789,
+            reserved: [0x01, 0x00, 0x00, 0x00],
+        };
+
+        let encoded = header.encode();
+        assert_eq!(encoded.len(), Mv2eHeader::SIZE);
+
+        let decoded = Mv2eHeader::decode(&encoded).unwrap();
+        assert_eq!(decoded.magic, MV2E_MAGIC);
+        assert_eq!(decoded.version, MV2E_VERSION);
+        assert_eq!(decoded.salt, [0xAA; SALT_SIZE]);
+        assert_eq!(decoded.nonce, [0xBB; NONCE_SIZE]);
+        assert_eq!(decoded.original_size, 123_456_789);
+        assert_eq!(decoded.reserved, [0x01, 0x00, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn header_invalid_magic_rejected() {
+        let header = Mv2eHeader {
+            magic: MV2E_MAGIC,
+            version: MV2E_VERSION,
+            kdf_algorithm: KdfAlgorithm::Argon2id,
+            cipher_algorithm: CipherAlgorithm::Aes256Gcm,
+            salt: [0; SALT_SIZE],
+            nonce: [0; NONCE_SIZE],
+            original_size: 0,
+            reserved: [0; 4],
+        };
+        let mut encoded = header.encode();
+        encoded[0] = b'X';
+        let result = Mv2eHeader::decode(&encoded);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn header_unsupported_version_rejected() {
+        let header = Mv2eHeader {
+            magic: MV2E_MAGIC,
+            version: MV2E_VERSION,
+            kdf_algorithm: KdfAlgorithm::Argon2id,
+            cipher_algorithm: CipherAlgorithm::Aes256Gcm,
+            salt: [0; SALT_SIZE],
+            nonce: [0; NONCE_SIZE],
+            original_size: 0,
+            reserved: [0; 4],
+        };
+        let mut encoded = header.encode();
+        encoded[4] = 99;
+        encoded[5] = 0;
+        let result = Mv2eHeader::decode(&encoded);
+        assert!(result.is_err());
+    }
+}

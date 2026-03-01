@@ -4,11 +4,11 @@ use super::util::to_search_value;
 use crate::search::parser::ParsedQuery;
 use crate::types::{Frame, FrameId};
 use crate::{MemvidError, Result};
-use blake3::{Hasher, hash};
+use blake3::{hash, Hasher};
 use tantivy::collector::TopDocs;
 use tantivy::indexer::IndexWriter;
 use tantivy::schema::{Field, OwnedValue, Schema, TantivyDocument};
-use tantivy::{Index, IndexReader, Term, doc};
+use tantivy::{doc, Index, IndexReader, Term};
 use tempfile::TempDir;
 
 /// Tantivy-backed search index used when the `lex` feature is enabled.
@@ -403,5 +403,252 @@ impl TantivyEngine {
 
     pub fn num_docs(&self) -> u64 {
         self.reader.searcher().num_docs()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::search::parser::parse_query;
+    use crate::types::Frame;
+    use std::collections::BTreeMap;
+
+    fn make_frame(id: u64, timestamp: i64) -> Frame {
+        Frame {
+            id,
+            timestamp,
+            anchor_ts: None,
+            anchor_source: None,
+            kind: None,
+            track: None,
+            payload_offset: 0,
+            payload_length: 0,
+            checksum: [0u8; 32],
+            uri: None,
+            title: None,
+            canonical_encoding: Default::default(),
+            canonical_length: None,
+            metadata: None,
+            search_text: None,
+            tags: Vec::new(),
+            labels: Vec::new(),
+            extra_metadata: BTreeMap::new(),
+            content_dates: Vec::new(),
+            chunk_manifest: None,
+            role: Default::default(),
+            parent_id: None,
+            chunk_index: None,
+            chunk_count: None,
+            status: Default::default(),
+            supersedes: None,
+            superseded_by: None,
+            source_sha256: None,
+            source_path: None,
+            enrichment_state: Default::default(),
+        }
+    }
+
+    #[test]
+    fn create_engine_returns_ok() {
+        let engine = TantivyEngine::create();
+        assert!(engine.is_ok(), "TantivyEngine::create() should succeed");
+    }
+
+    #[test]
+    fn empty_index_returns_zero_docs() {
+        let engine = TantivyEngine::create().unwrap();
+        assert_eq!(engine.num_docs(), 0);
+    }
+
+    #[test]
+    fn empty_index_search_returns_no_results() {
+        let engine = TantivyEngine::create().unwrap();
+        let parsed = parse_query("nonexistent").unwrap();
+        let hits = engine
+            .search_documents(&parsed, None, None, None, 10)
+            .unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn add_frame_and_search_finds_it() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 1000);
+        engine
+            .add_frame(&frame, "the quick brown fox jumps over the lazy dog")
+            .unwrap();
+        engine.commit().unwrap();
+
+        assert_eq!(engine.num_docs(), 1);
+
+        let parsed = parse_query("fox").unwrap();
+        let hits = engine
+            .search_documents(&parsed, None, None, None, 10)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].frame_id, 1);
+        assert!(hits[0].score > 0.0);
+    }
+
+    #[test]
+    fn add_frame_skips_empty_content() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 1000);
+        engine.add_frame(&frame, "   ").unwrap();
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 0);
+    }
+
+    #[test]
+    fn delete_frame_removes_from_search() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(42, 2000);
+        engine
+            .add_frame(&frame, "unique document about deletions")
+            .unwrap();
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 1);
+
+        engine.delete_frame(42).unwrap();
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 0);
+
+        let parsed = parse_query("deletions").unwrap();
+        let hits = engine
+            .search_documents(&parsed, None, None, None, 10)
+            .unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn multiple_documents_ranked_by_relevance() {
+        let mut engine = TantivyEngine::create().unwrap();
+
+        let frame1 = make_frame(1, 100);
+        engine
+            .add_frame(&frame1, "rust programming language systems")
+            .unwrap();
+
+        let frame2 = make_frame(2, 200);
+        engine
+            .add_frame(
+                &frame2,
+                "rust rust rust programming in rust is great for rust developers",
+            )
+            .unwrap();
+
+        let frame3 = make_frame(3, 300);
+        engine
+            .add_frame(&frame3, "python programming language scripting")
+            .unwrap();
+
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 3);
+
+        let parsed = parse_query("rust").unwrap();
+        let hits = engine
+            .search_documents(&parsed, None, None, None, 10)
+            .unwrap();
+        // Should find at least the two rust documents
+        assert!(hits.len() >= 2);
+        // The document with more "rust" mentions should rank higher
+        assert_eq!(hits[0].frame_id, 2);
+    }
+
+    #[test]
+    fn snapshot_segments_round_trip() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 500);
+        engine
+            .add_frame(&frame, "snapshot test content for persistence")
+            .unwrap();
+        engine.commit().unwrap();
+
+        let snapshot = engine.snapshot_segments().unwrap();
+        assert_eq!(snapshot.doc_count, 1);
+        assert!(!snapshot.segments.is_empty());
+
+        // Each segment should have non-empty bytes and a valid checksum
+        for seg in &snapshot.segments {
+            assert!(!seg.path.is_empty());
+            assert!(!seg.bytes.is_empty());
+            assert_ne!(seg.checksum, [0u8; 32]);
+        }
+
+        // Overall checksum should be non-zero
+        assert_ne!(snapshot.checksum, [0u8; 32]);
+    }
+
+    #[test]
+    fn analyse_text_tokenizes_input() {
+        let engine = TantivyEngine::create().unwrap();
+        let tokens = engine.analyse_text("Hello World");
+        assert!(!tokens.is_empty());
+        // Tokenizer should lowercase
+        for token in &tokens {
+            assert_eq!(token, &token.to_ascii_lowercase());
+        }
+    }
+
+    #[test]
+    fn analyse_text_empty_input() {
+        let engine = TantivyEngine::create().unwrap();
+        let tokens = engine.analyse_text("");
+        assert!(tokens.is_empty());
+    }
+
+    #[test]
+    fn search_with_empty_frame_filter_returns_empty() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 100);
+        engine.add_frame(&frame, "some content").unwrap();
+        engine.commit().unwrap();
+
+        let parsed = parse_query("content").unwrap();
+        let empty_filter: Vec<u64> = vec![];
+        let hits = engine
+            .search_documents(&parsed, None, None, Some(&empty_filter), 10)
+            .unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn reset_clears_all_documents() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 100);
+        engine.add_frame(&frame, "content to reset").unwrap();
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 1);
+
+        engine.reset().unwrap();
+        assert_eq!(engine.num_docs(), 0);
+    }
+
+    #[test]
+    fn soft_commit_makes_docs_searchable() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let frame = make_frame(1, 100);
+        engine
+            .add_frame(&frame, "soft commit searchable content")
+            .unwrap();
+        engine.soft_commit().unwrap();
+
+        let parsed = parse_query("searchable").unwrap();
+        let hits = engine
+            .search_documents(&parsed, None, None, None, 10)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn frame_with_tags_indexed() {
+        let mut engine = TantivyEngine::create().unwrap();
+        let mut frame = make_frame(1, 100);
+        frame.tags = vec!["important".to_string(), "review".to_string()];
+        engine
+            .add_frame(&frame, "document with tags")
+            .unwrap();
+        engine.commit().unwrap();
+        assert_eq!(engine.num_docs(), 1);
     }
 }
