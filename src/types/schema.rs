@@ -611,7 +611,7 @@ mod tests {
         assert!(!registry.contains("employer"));
         assert!(!registry.contains("age"));
         assert!(!registry.contains("location"));
-        assert!(registry.all().next().is_none() || registry.all().count() == 0);
+        assert_eq!(registry.all().count(), 0);
     }
 
     #[test]

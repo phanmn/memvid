@@ -460,9 +460,9 @@ fn pdf_fallback_metadata() -> Value {
 }
 
 #[cfg(feature = "extractous")]
-const PDF_FALLBACK_MAX_BYTES: usize = 256 * 1024 * 1024; // 256 MiB hard cap.
+const PDF_FALLBACK_MAX_BYTES: usize = 32 * 1024 * 1024; // 32 MiB hard cap (conservative default).
 #[cfg(feature = "extractous")]
-const PDF_FALLBACK_MAX_PAGES: usize = 16_384;
+const PDF_FALLBACK_MAX_PAGES: usize = 2_048;
 
 #[cfg(feature = "extractous")]
 fn pdf_text_fallback(bytes: &[u8]) -> Result<Option<String>> {
@@ -999,8 +999,10 @@ mod infrastructure_tests {
 
     #[test]
     fn extract_from_path_nonexistent_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does_not_exist.txt");
         let processor = DocumentProcessor::new(ProcessorConfig::default());
-        let result = processor.extract_from_path(Path::new("/nonexistent/path/to/file.txt"));
+        let result = processor.extract_from_path(&missing);
         assert!(result.is_err());
     }
 }

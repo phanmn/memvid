@@ -29,7 +29,8 @@ Inline unit tests in capsule.rs, capsule_stream.rs, crypto.rs, types.rs:
 - `corrupted_ciphertext_fails` — tampered data returns error
 - `iv_uniqueness` — each encryption produces unique IV
 
-Integration test: `tests/encryption_unit.rs`
+Tests are inline `#[cfg(test)]` modules within `src/encryption/capsule.rs` and
+`src/encryption/capsule_stream.rs`. Run with `cargo test`.
 
 #### 1.2 Mutation Pipeline (`src/memvid/mutation.rs`)
 

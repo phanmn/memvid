@@ -117,7 +117,9 @@ impl ReplayAction {
     ///
     /// # Security
     /// This function implements multiple layers of defense against malicious output:
-    /// - **Size Validation**: Enforces strict 10MB limit, rejecting larger payloads
+    /// - **Size Validation**: Enforces a 64MB hard limit (`MAX_OUTPUT_SIZE`), with an
+    ///   8MB warning threshold (`WARN_OUTPUT_SIZE`); payloads exceeding the hard limit
+    ///   are rejected entirely
     /// - **Content Sanitization**: Removes control characters that could enable injection
     /// - **Memory Safety**: Uses safe UTF-8 conversion with lossy handling
     /// - **`DoS` Prevention**: Prevents memory exhaustion and resource abuse

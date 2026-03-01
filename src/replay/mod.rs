@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn replay_config_default_has_positive_auto_checkpoint_interval() {
+    fn replay_config_default_has_zero_auto_checkpoint_interval() {
         // Default auto_checkpoint_interval is 0 (disabled) which is valid,
         // but we test that the struct initializes without panic
         let config = ReplayConfig::default();

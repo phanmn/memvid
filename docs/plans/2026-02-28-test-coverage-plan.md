@@ -1,6 +1,6 @@
 # Test Coverage Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Required: follow the documented task execution workflow to implement this plan step-by-step.
 
 **Goal:** Add ~75 unit tests and 5 integration tests to cover all 64 untested source files in the memvid codebase.
 

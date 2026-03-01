@@ -316,15 +316,15 @@ mod tests {
 
     #[test]
     fn lockfile_path_adds_lock_extension() {
-        let path = Path::new("/tmp/test.mv2");
+        let path = Path::new("test.mv2");
         let lock = lockfile_path(path);
-        assert_eq!(lock, PathBuf::from("/tmp/test.mv2.lock"));
+        assert_eq!(lock, PathBuf::from("test.mv2.lock"));
     }
 
     #[test]
     fn lockfile_path_no_extension() {
-        let path = Path::new("/tmp/testfile");
+        let path = Path::new("testfile");
         let lock = lockfile_path(path);
-        assert_eq!(lock, PathBuf::from("/tmp/testfile.lock"));
+        assert_eq!(lock, PathBuf::from("testfile.lock"));
     }
 }
