@@ -41,6 +41,7 @@ impl TimelineQuery {
 #[derive(Debug, Default)]
 pub struct TimelineQueryBuilder {
     inner: TimelineQuery,
+    explicit_no_limit: bool,
 }
 
 impl TimelineQueryBuilder {
@@ -77,12 +78,13 @@ impl TimelineQueryBuilder {
     #[must_use]
     pub fn no_limit(mut self) -> Self {
         self.inner.limit = None;
+        self.explicit_no_limit = true;
         self
     }
 
     #[must_use]
     pub fn build(mut self) -> TimelineQuery {
-        if self.inner.limit.is_none() {
+        if self.inner.limit.is_none() && !self.explicit_no_limit {
             self.inner.limit = NonZeroU64::new(100);
         }
         self.inner
@@ -439,19 +441,16 @@ mod tests {
     #[test]
     fn timeline_query_builder_no_limit() {
         let query = TimelineQuery::builder().no_limit().build();
-        // no_limit() sets limit to None, then build() fills in the default 100
-        // But the intent of no_limit + build is: no_limit sets None, build sees None and sets 100.
-        // Let's check: no_limit sets inner.limit = None, then build sees None and sets 100.
-        // Actually, the builder will override to 100. Let's just check:
-        assert_eq!(query.limit, NonZeroU64::new(100));
+        // no_limit() should produce an unbounded query
+        assert_eq!(query.limit, None);
     }
 
     #[test]
     fn timeline_query_builder_no_limit_after_explicit_limit() {
         let limit = NonZeroU64::new(50).unwrap();
         let query = TimelineQuery::builder().limit(limit).no_limit().build();
-        // no_limit clears the limit; build() then sets it back to 100
-        assert_eq!(query.limit, NonZeroU64::new(100));
+        // An explicit limit followed by no_limit() should also produce an unbounded query
+        assert_eq!(query.limit, None);
     }
 
     #[test]

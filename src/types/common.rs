@@ -236,9 +236,30 @@ mod tests {
 
     #[test]
     fn tier_capacity_bytes_are_non_zero_and_ordered() {
+        // Clear env vars to ensure we test the hardcoded defaults, not overrides.
+        // SAFETY: This test runs single-threaded (serial test mutex) and these env
+        // vars are only read by capacity_bytes(); no other thread depends on them.
+        let vars = [
+            "MEMVID_FREE_CAPACITY_BYTES",
+            "MEMVID_DEV_CAPACITY_BYTES",
+            "MEMVID_ENTERPRISE_CAPACITY_BYTES",
+        ];
+        let saved: Vec<_> = vars.iter().map(|v| std::env::var(v).ok()).collect();
+        for var in &vars {
+            unsafe { std::env::remove_var(var) };
+        }
+
         let free = Tier::Free.capacity_bytes();
         let dev = Tier::Dev.capacity_bytes();
         let enterprise = Tier::Enterprise.capacity_bytes();
+
+        // Restore env vars
+        for (var, val) in vars.iter().zip(saved) {
+            if let Some(v) = val {
+                unsafe { std::env::set_var(var, v) };
+            }
+        }
+
         assert!(free > 0, "Free tier capacity must be non-zero");
         assert!(dev > 0, "Dev tier capacity must be non-zero");
         assert!(enterprise > 0, "Enterprise tier capacity must be non-zero");

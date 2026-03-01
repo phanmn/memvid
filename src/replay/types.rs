@@ -580,6 +580,24 @@ mod tests {
     }
 
     #[test]
+    fn with_input_rejects_oversized_payload() {
+        let too_large = vec![b'x'; (64 * 1024 * 1024) + 1];
+        let action =
+            ReplayAction::new(0, ActionType::Put { frame_id: 1 }).with_input(&too_large);
+        assert_eq!(action.input_hash, [0xFF; 32]);
+        assert!(action.input_preview.contains("exceeds maximum"));
+    }
+
+    #[test]
+    fn with_output_rejects_oversized_payload() {
+        let too_large = vec![b'y'; (64 * 1024 * 1024) + 1];
+        let action =
+            ReplayAction::new(0, ActionType::Put { frame_id: 1 }).with_output(&too_large);
+        assert_eq!(action.output_hash, [0xFF; 32]);
+        assert!(action.output_preview.contains("exceeds maximum"));
+    }
+
+    #[test]
     fn with_duration_ms_sets_duration() {
         let action = ReplayAction::new(0, ActionType::Put { frame_id: 1 })
             .with_duration_ms(500);

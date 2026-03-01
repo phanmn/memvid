@@ -640,9 +640,9 @@ fn cache_store(hash: blake3::Hash, document: &ExtractedDocument) {
 // ============================================================================
 
 #[allow(dead_code)]
-const PDF_LOPDF_MAX_BYTES: usize = 256 * 1024 * 1024; // 256 MiB hard cap
+const PDF_LOPDF_MAX_BYTES: usize = 32 * 1024 * 1024; // 32 MiB hard cap (conservative default)
 #[allow(dead_code)]
-const PDF_LOPDF_MAX_PAGES: usize = 16_384;
+const PDF_LOPDF_MAX_PAGES: usize = 2_048;
 
 /// Try multiple PDF extractors and return the best result
 /// Returns (text, `extractor_name`) or None if no text found

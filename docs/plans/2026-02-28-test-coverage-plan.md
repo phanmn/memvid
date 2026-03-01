@@ -881,7 +881,7 @@ mod tests {
         assert_eq!(DocumentFormat::Docx.label(), "docx");
         assert_eq!(DocumentFormat::Xlsx.label(), "xlsx");
         assert_eq!(DocumentFormat::Pptx.label(), "pptx");
-        assert_eq!(DocumentFormat::PlainText.label(), "plaintext");
+        assert_eq!(DocumentFormat::PlainText.label(), "text");
     }
 }
 ```
@@ -2000,7 +2000,7 @@ mod tests {
     #[test]
     fn replay_config_default() {
         let config = ReplayConfig::default();
-        assert!(config.auto_checkpoint_interval > 0);
+        assert_eq!(config.auto_checkpoint_interval, 0); // 0 means disabled
     }
 
     #[test]
