@@ -117,6 +117,8 @@ impl Memvid {
             time_index_bytes,
             vector_count,
             clip_image_count,
+            lex_enabled: self.lex_enabled,
+            vec_enabled: self.vec_enabled,
         })
     }
 

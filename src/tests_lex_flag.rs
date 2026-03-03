@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::{Memvid, PutOptions, SearchRequest, run_serial_test};
+    use std::sync::Mutex;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -85,6 +86,135 @@ mod tests {
                     first_hit.text
                 );
             }
+        });
+    }
+
+    /// Regression test for GitHub issue #201:
+    /// Lexical index not enabled when Memvid is wrapped in a Mutex.
+    /// The wrapper pattern acquires the lock, performs an operation, releases
+    /// the lock — mimicking the typical tokio::sync::Mutex usage in async code.
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn test_lex_works_through_mutex_wrapper() {
+        run_serial_test(|| {
+            let temp = NamedTempFile::new().unwrap();
+            let path = temp.path();
+
+            // Wrap Memvid in a Mutex, exactly like an async wrapper would
+            let wrapper = Mutex::new(Memvid::create(path).unwrap());
+
+            // Step 1: enable_lex while holding the lock, then release
+            {
+                let mut mem = wrapper.lock().unwrap();
+                mem.enable_lex().unwrap();
+            }
+
+            // Step 2: commit while holding the lock (separate acquisition)
+            {
+                let mut mem = wrapper.lock().unwrap();
+                mem.commit().unwrap();
+            }
+
+            // Step 3: put data while holding the lock
+            {
+                let mut mem = wrapper.lock().unwrap();
+                let opts = PutOptions::builder()
+                    .uri("mv2://test/login".to_string())
+                    .search_text(
+                        "user clicked login button on the authentication page".to_string(),
+                    )
+                    .build();
+                mem.put_bytes_with_options(b"login event data", opts)
+                    .unwrap();
+            }
+
+            // Step 4: commit while holding the lock
+            {
+                let mut mem = wrapper.lock().unwrap();
+                mem.commit().unwrap();
+            }
+
+            // Step 5: search while holding the lock — this was failing in #201
+            {
+                let mut mem = wrapper.lock().unwrap();
+                let resp = mem
+                    .search(SearchRequest {
+                        query: "login".into(),
+                        top_k: 10,
+                        snippet_chars: 200,
+                        uri: None,
+                        scope: None,
+                        cursor: None,
+                        #[cfg(feature = "temporal_track")]
+                        temporal: None,
+                        as_of_frame: None,
+                        as_of_ts: None,
+                        no_sketch: false,
+                        acl_context: None,
+                        acl_enforcement_mode: crate::types::AclEnforcementMode::Audit,
+                    })
+                    .expect("search must succeed through mutex wrapper");
+
+                assert!(
+                    !resp.hits.is_empty(),
+                    "Should find the frame with 'login' in the message"
+                );
+            }
+
+            // Step 6: search_lex uses the legacy LexIndex, which may not be
+            // populated when only Tantivy is active. Verify it doesn't panic.
+            {
+                let mut mem = wrapper.lock().unwrap();
+                let _ = mem.search_lex("login", 10);
+                // Result may be Ok (if legacy index was built) or Err (if only Tantivy).
+                // The important thing is it doesn't panic.
+            }
+        });
+    }
+
+    /// Regression test for #201: enable_lex, put, commit, search — all in one lock scope.
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn test_lex_works_single_scope() {
+        run_serial_test(|| {
+            let temp = NamedTempFile::new().unwrap();
+            let path = temp.path();
+
+            let mut mem = Memvid::create(path).unwrap();
+            mem.enable_lex().unwrap();
+
+            let opts = PutOptions::builder()
+                .uri("mv2://test/login".to_string())
+                .search_text(
+                    "user clicked login button on the authentication page".to_string(),
+                )
+                .build();
+            mem.put_bytes_with_options(b"login event data", opts)
+                .unwrap();
+            mem.commit().unwrap();
+
+            let resp = mem
+                .search(SearchRequest {
+                    query: "login".into(),
+                    top_k: 10,
+                    snippet_chars: 200,
+                    uri: None,
+                    scope: None,
+                    cursor: None,
+                    #[cfg(feature = "temporal_track")]
+                    temporal: None,
+                    as_of_frame: None,
+                    as_of_ts: None,
+                    no_sketch: false,
+                    acl_context: None,
+                    acl_enforcement_mode: crate::types::AclEnforcementMode::Audit,
+                })
+                .expect("search must succeed");
+
+            assert!(
+                !resp.hits.is_empty(),
+                "Should find the frame with 'login' in the message"
+            );
         });
     }
 }

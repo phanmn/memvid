@@ -429,6 +429,7 @@ impl Memvid {
         let original_data_end = self.data_end;
         let original_generation = self.generation;
         let original_dirty = self.dirty;
+        let original_lex_enabled = self.lex_enabled;
         #[cfg(feature = "lex")]
         let original_tantivy_dirty = self.tantivy_dirty;
 
@@ -462,6 +463,7 @@ impl Memvid {
                         self.data_end = original_data_end;
                         self.generation = original_generation;
                         self.dirty = original_dirty;
+                        self.lex_enabled = original_lex_enabled;
                         #[cfg(feature = "lex")]
                         {
                             self.tantivy_dirty = original_tantivy_dirty;
@@ -483,6 +485,7 @@ impl Memvid {
                 self.data_end = original_data_end;
                 self.generation = original_generation;
                 self.dirty = original_dirty;
+                self.lex_enabled = original_lex_enabled;
                 #[cfg(feature = "lex")]
                 {
                     self.tantivy_dirty = original_tantivy_dirty;

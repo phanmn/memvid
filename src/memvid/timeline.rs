@@ -10,7 +10,7 @@ use crate::types::{
     SearchHitTemporal, SearchHitTemporalAnchor, SearchHitTemporalMention, TemporalFilter,
     TemporalTrack,
 };
-use crate::{MemvidError, Result};
+use crate::Result;
 #[cfg(feature = "temporal_track")]
 use std::collections::HashSet;
 use std::num::NonZeroU64;
@@ -95,14 +95,17 @@ pub(crate) fn build_timeline(
     #[cfg(feature = "temporal_track")]
     let temporal_track_snapshot = memvid.temporal_track_ref()?.cloned();
     for entry in entries.into_iter().take(limit) {
-        let frame = memvid
+        let frame = match memvid
             .toc
             .frames
             .get(usize::try_from(entry.frame_id).unwrap_or(usize::MAX))
-            .ok_or(MemvidError::InvalidTimeIndex {
-                reason: "frame id out of range".into(),
-            })?
-            .clone();
+        {
+            Some(f) => f.clone(),
+            None => {
+                tracing::warn!(frame_id = entry.frame_id, "skipping time index entry with out-of-range frame id");
+                continue;
+            }
+        };
         if frame.status != FrameStatus::Active {
             continue;
         }

@@ -138,6 +138,12 @@ pub struct Stats {
     /// Number of CLIP visual embeddings (images/PDF pages)
     #[serde(default)]
     pub clip_image_count: u64,
+    /// Whether the lex (full-text) search engine is enabled at runtime.
+    #[serde(default)]
+    pub lex_enabled: bool,
+    /// Whether the vec (vector/semantic) search engine is enabled at runtime.
+    #[serde(default)]
+    pub vec_enabled: bool,
 }
 
 /// Entry returned by `timeline` queries, carrying a lightweight preview.

@@ -48,6 +48,13 @@ impl Memvid {
             return Err(MemvidError::LexNotEnabled);
         }
 
+        // Lazy-init Tantivy if lex is enabled but engine is missing.
+        // This can happen when a wrapper re-enables lex on an already-enabled
+        // instance, or after a staging-lock rollback lost the engine reference.
+        if self.tantivy.is_none() {
+            self.init_tantivy()?;
+        }
+
         let start_time = Instant::now();
         // parse_query can return structured tokens; we only keep non-empty, lower-cased terms.
         let parsed = crate::search::parse_query(&request.query)?;

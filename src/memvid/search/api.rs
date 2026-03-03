@@ -19,10 +19,19 @@ impl Memvid {
     pub fn enable_lex(&mut self) -> Result<()> {
         self.ensure_writable()?;
         if self.lex_enabled {
-            // If index exists on disk but not in memory, load it
             #[cfg(feature = "lex")]
-            if self.lex_index.is_none() && crate::memvid::lifecycle::has_lex_index(&self.toc) {
-                self.load_lex_index_from_manifest()?;
+            {
+                // If index exists on disk but not in memory, load it
+                if self.lex_index.is_none()
+                    && crate::memvid::lifecycle::has_lex_index(&self.toc)
+                {
+                    self.load_lex_index_from_manifest()?;
+                }
+                // Ensure Tantivy engine is running even if lex was already enabled
+                // (e.g. create() set lex_enabled=true but tantivy may have been lost)
+                if self.tantivy.is_none() {
+                    self.init_tantivy()?;
+                }
             }
             return Ok(());
         }
