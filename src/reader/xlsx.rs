@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use calamine::{DataType, Reader as CalamineReader, Xlsx};
 
@@ -9,6 +9,55 @@ use crate::{
     types::structure::ChunkingResult, DocumentFormat, DocumentReader, PassthroughReader,
     ReaderDiagnostics, ReaderHint, ReaderOutput, Result,
 };
+
+/// Maximum XLSX file size before rejection (100 MB).
+const XLSX_MAX_FILE_BYTES: u64 = 104_857_600;
+
+/// Maximum decompressed size for any single ZIP entry (1 GB).
+const XLSX_MAX_ENTRY_BYTES: u64 = 1_073_741_824;
+
+/// Check XLSX byte-slice size against limits and validate ZIP entries
+/// against decompression bomb threshold.
+fn validate_xlsx_size(bytes: &[u8]) -> Result<()> {
+    let size = bytes.len() as u64;
+    if size > XLSX_MAX_FILE_BYTES {
+        return Err(crate::MemvidError::FileTooLarge {
+            path: "<in-memory>".to_string(),
+            size,
+            limit: XLSX_MAX_FILE_BYTES,
+        });
+    }
+
+    // Validate individual ZIP entry decompressed sizes
+    let cursor = Cursor::new(bytes);
+    if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
+        for i in 0..archive.len() {
+            if let Ok(mut entry) = archive.by_index(i) {
+                let entry_name = entry.name().to_string();
+                let mut decompressed_bytes: u64 = 0;
+                let mut buf = [0u8; 8192];
+                loop {
+                    match entry.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            decompressed_bytes += n as u64;
+                            if decompressed_bytes > XLSX_MAX_ENTRY_BYTES {
+                                return Err(crate::MemvidError::DecompressionTooLarge {
+                                    entry: entry_name,
+                                    size: decompressed_bytes,
+                                    limit: XLSX_MAX_ENTRY_BYTES,
+                                });
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 /// Result of the structured XLSX extraction pipeline.
 pub struct XlsxStructuredResult {
@@ -91,6 +140,7 @@ impl XlsxReader {
         bytes: &[u8],
         options: XlsxChunkingOptions,
     ) -> Result<XlsxStructuredResult> {
+        validate_xlsx_size(bytes)?;
         let grids = Self::build_grids(bytes)?;
         let metadata = parse_ooxml_metadata(bytes).unwrap_or_default();
 
@@ -133,6 +183,7 @@ impl XlsxReader {
     }
 
     fn extract_text(bytes: &[u8]) -> Result<String> {
+        validate_xlsx_size(bytes)?;
         let cursor = Cursor::new(bytes);
         let mut workbook =
             Xlsx::new(cursor).map_err(|err| crate::MemvidError::ExtractionFailed {

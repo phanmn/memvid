@@ -524,7 +524,7 @@ fn kmeans_plus_plus_init(vectors: &[Vec<f32>], k: usize) -> Result<Vec<Vec<f32>>
 
 /// Squared L2 distance between two vectors
 fn l2_distance_squared(a: &[f32], b: &[f32]) -> f32 {
-    crate::simd::l2_distance_squared_simd(a, b)
+    crate::simd::l2_distance_squared_simd(a, b).unwrap_or(f32::INFINITY)
 }
 
 #[cfg(test)]

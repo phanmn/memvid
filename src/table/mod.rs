@@ -103,13 +103,19 @@ pub fn extract_tables(
 
 /// Check if bytes start with PDF magic number.
 fn is_pdf_magic(bytes: &[u8]) -> bool {
-    // PDF magic: %PDF (after optional BOM/whitespace)
-    let trimmed = bytes
+    // Strip UTF-8 BOM (0xEF, 0xBB, 0xBF) if present, then skip whitespace
+    let after_bom = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        &bytes[3..]
+    } else {
+        bytes
+    };
+
+    let trimmed: Vec<u8> = after_bom
         .iter()
-        .skip_while(|&&b| b == 0xEF || b == 0xBB || b == 0xBF || b.is_ascii_whitespace())
+        .skip_while(|b| b.is_ascii_whitespace())
         .take(4)
         .copied()
-        .collect::<Vec<_>>();
+        .collect();
 
     trimmed.starts_with(b"%PDF")
 }

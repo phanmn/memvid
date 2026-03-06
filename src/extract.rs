@@ -8,6 +8,8 @@ use crate::symspell_cleanup::fix_pdf_text as fix_pdf_spacing;
 #[cfg(not(feature = "symspell_cleanup"))]
 use crate::text::fix_pdf_spacing;
 
+// Intentionally using `log::LevelFilter` (not tracing) to suppress third-party
+// library output from extractous/lopdf which use the `log` facade directly.
 #[cfg(feature = "extractous")]
 use log::LevelFilter;
 use lopdf::Document as LopdfDocument;

@@ -1,4 +1,4 @@
-use crate::io::time_index::read_track as time_index_read;
+use crate::io::time_index::read_track_verified as time_index_read;
 use crate::memvid::lifecycle::Memvid;
 use crate::Result;
 
@@ -44,6 +44,7 @@ pub(super) fn frame_ids_in_date_range(
         &mut memvid.file,
         manifest.bytes_offset,
         manifest.bytes_length,
+        manifest.checksum,
     )?;
     let mut ids = Vec::new();
     for entry in entries {

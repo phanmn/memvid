@@ -94,6 +94,8 @@ pub struct Memvid {
     pub(crate) schema_registry: SchemaRegistry,
     /// Whether to enforce strict schema validation on card insert.
     pub(crate) schema_strict: bool,
+    /// Accumulated index-load error descriptions for diagnostics via `stats()`.
+    pub(crate) index_load_errors: Vec<String>,
     /// Active batch mode options (set by `begin_batch`, cleared by `end_batch`).
     pub(crate) batch_opts: Option<PutManyOpts>,
     /// Active replay session being recorded (if any).
@@ -215,6 +217,7 @@ impl Memvid {
             sketch_track: SketchTrack::default(),
             schema_registry: SchemaRegistry::new(),
             schema_strict: false,
+            index_load_errors: Vec::new(),
             batch_opts: None,
             #[cfg(feature = "replay")]
             active_session: None,
@@ -397,6 +400,7 @@ impl Memvid {
             sketch_track: SketchTrack::default(),
             schema_registry: SchemaRegistry::new(),
             schema_strict: false,
+            index_load_errors: Vec::new(),
             batch_opts: None,
             #[cfg(feature = "replay")]
             active_session: None,
@@ -472,7 +476,7 @@ impl Memvid {
     }
 
     fn open_read_only_snapshot(path_ref: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new().read(true).write(true).open(path_ref)?;
+        let mut file = OpenOptions::new().read(true).open(path_ref)?;
         let TailSnapshot {
             toc,
             footer_offset,
@@ -532,6 +536,7 @@ impl Memvid {
             sketch_track: SketchTrack::default(),
             schema_registry: SchemaRegistry::new(),
             schema_strict: false,
+            index_load_errors: Vec::new(),
             batch_opts: None,
             #[cfg(feature = "replay")]
             active_session: None,
@@ -696,6 +701,13 @@ impl Memvid {
 
         // Deserialize the logic mesh
         self.logic_mesh = LogicMesh::deserialize(&buf)?;
+
+        // Migrate old-format (DefaultHasher) node IDs to BLAKE3 if needed
+        if self.logic_mesh.needs_migration() {
+            tracing::info!("migrating logic mesh node IDs from DefaultHasher to BLAKE3");
+            self.logic_mesh.migrate_node_ids();
+            self.dirty = true;
+        }
 
         Ok(())
     }

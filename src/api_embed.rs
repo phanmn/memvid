@@ -21,6 +21,7 @@ use crate::error::{MemvidError, Result};
 use crate::types::embedding::EmbeddingProvider;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -81,6 +82,24 @@ pub fn get_openai_model_info(name: &str) -> &'static OpenAIModelInfo {
 #[must_use]
 pub fn default_openai_model_info() -> &'static OpenAIModelInfo {
     OPENAI_MODELS.iter().find(|m| m.is_default).unwrap()
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Emit a warning if the URL uses HTTP instead of HTTPS (excluding localhost).
+fn warn_if_insecure_url(url: &str) {
+    if url.starts_with("http://")
+        && !url.starts_with("http://localhost")
+        && !url.starts_with("http://127.0.0.1")
+        && !url.starts_with("http://[::1]")
+    {
+        tracing::warn!(
+            url = %url,
+            "API base URL uses HTTP instead of HTTPS; credentials may be transmitted in plaintext"
+        );
+    }
 }
 
 // ============================================================================
@@ -147,6 +166,7 @@ impl OpenAIConfig {
     #[must_use]
     pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = url.into();
+        warn_if_insecure_url(&self.base_url);
         self
     }
 
@@ -232,7 +252,7 @@ pub struct OpenAIEmbedder {
     config: OpenAIConfig,
     model_info: &'static OpenAIModelInfo,
     client: Client,
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl OpenAIEmbedder {
@@ -256,6 +276,10 @@ impl OpenAIEmbedder {
             });
         }
 
+        // Warn if base URL uses HTTP instead of HTTPS (except localhost)
+        warn_if_insecure_url(&config.base_url);
+
+        let api_key = SecretString::from(api_key);
         let model_info = get_openai_model_info(&config.model);
 
         let client = Client::builder()
@@ -299,11 +323,10 @@ impl OpenAIEmbedder {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", self.api_key)).map_err(|_| {
-                MemvidError::EmbeddingFailed {
+            HeaderValue::from_str(&format!("Bearer {}", self.api_key.expose_secret()))
+                .map_err(|_| MemvidError::EmbeddingFailed {
                     reason: "Invalid API key format".into(),
-                }
-            })?,
+                })?,
         );
 
         let mut backoff_ms = self.config.initial_backoff_ms;
@@ -456,7 +479,7 @@ impl EmbeddingProvider for OpenAIEmbedder {
 
     fn is_ready(&self) -> bool {
         // We have an API key, so we're ready
-        !self.api_key.is_empty()
+        !self.api_key.expose_secret().is_empty()
     }
 }
 

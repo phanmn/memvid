@@ -3,6 +3,8 @@
 //! This module provides optimized L2 (Euclidean) distance functions using
 //! the `wide` crate for portable SIMD across `x86_64` and aarch64.
 
+use crate::MemvidError;
+
 #[cfg(feature = "simd")]
 use wide::f32x8;
 
@@ -10,10 +12,17 @@ use wide::f32x8;
 ///
 /// Uses 8-wide SIMD lanes (AVX2 on `x86_64`, NEON on aarch64).
 /// Falls back to scalar for remainder elements.
+///
+/// # Errors
+/// Returns `MemvidError::DimensionMismatch` if slices have different lengths.
 #[cfg(feature = "simd")]
-#[must_use]
-pub fn l2_distance_squared_simd(a: &[f32], b: &[f32]) -> f32 {
-    debug_assert_eq!(a.len(), b.len(), "vectors must have same length");
+pub fn l2_distance_squared_simd(a: &[f32], b: &[f32]) -> Result<f32, MemvidError> {
+    if a.len() != b.len() {
+        return Err(MemvidError::DimensionMismatch {
+            expected: a.len(),
+            got: b.len(),
+        });
+    }
 
     let len = a.len();
     let chunks = len / 8;
@@ -59,34 +68,48 @@ pub fn l2_distance_squared_simd(a: &[f32], b: &[f32]) -> f32 {
         total += diff * diff;
     }
 
-    total
+    Ok(total)
 }
 
 /// Compute L2 distance (with sqrt) using SIMD.
+///
+/// # Errors
+/// Returns `MemvidError::DimensionMismatch` if slices have different lengths.
 #[cfg(feature = "simd")]
-#[must_use]
-pub fn l2_distance_simd(a: &[f32], b: &[f32]) -> f32 {
-    l2_distance_squared_simd(a, b).sqrt()
+pub fn l2_distance_simd(a: &[f32], b: &[f32]) -> Result<f32, MemvidError> {
+    Ok(l2_distance_squared_simd(a, b)?.sqrt())
 }
 
 // Scalar fallbacks when SIMD feature is disabled
 
 /// Compute squared L2 distance using scalar math.
+///
+/// # Errors
+/// Returns `MemvidError::DimensionMismatch` if slices have different lengths.
 #[cfg(not(feature = "simd"))]
-pub fn l2_distance_squared_simd(a: &[f32], b: &[f32]) -> f32 {
-    a.iter()
+pub fn l2_distance_squared_simd(a: &[f32], b: &[f32]) -> Result<f32, MemvidError> {
+    if a.len() != b.len() {
+        return Err(MemvidError::DimensionMismatch {
+            expected: a.len(),
+            got: b.len(),
+        });
+    }
+    Ok(a.iter()
         .zip(b.iter())
         .map(|(x, y)| {
             let diff = x - y;
             diff * diff
         })
-        .sum()
+        .sum())
 }
 
 /// Compute L2 distance using scalar math.
+///
+/// # Errors
+/// Returns `MemvidError::DimensionMismatch` if slices have different lengths.
 #[cfg(not(feature = "simd"))]
-pub fn l2_distance_simd(a: &[f32], b: &[f32]) -> f32 {
-    l2_distance_squared_simd(a, b).sqrt()
+pub fn l2_distance_simd(a: &[f32], b: &[f32]) -> Result<f32, MemvidError> {
+    Ok(l2_distance_squared_simd(a, b)?.sqrt())
 }
 
 #[cfg(test)]
@@ -97,7 +120,7 @@ mod tests {
     fn test_l2_distance_squared_basic() {
         let a = [0.0, 0.0, 0.0];
         let b = [3.0, 4.0, 0.0];
-        let dist_sq = l2_distance_squared_simd(&a, &b);
+        let dist_sq = l2_distance_squared_simd(&a, &b).unwrap();
         assert!(
             (dist_sq - 25.0).abs() < 1e-6,
             "expected 25.0, got {}",
@@ -109,8 +132,16 @@ mod tests {
     fn test_l2_distance_basic() {
         let a = [0.0, 0.0];
         let b = [3.0, 4.0];
-        let dist = l2_distance_simd(&a, &b);
+        let dist = l2_distance_simd(&a, &b).unwrap();
         assert!((dist - 5.0).abs() < 1e-6, "expected 5.0, got {}", dist);
+    }
+
+    #[test]
+    fn test_l2_distance_dimension_mismatch() {
+        let a = [0.0, 0.0];
+        let b = [1.0, 2.0, 3.0];
+        assert!(l2_distance_simd(&a, &b).is_err());
+        assert!(l2_distance_squared_simd(&a, &b).is_err());
     }
 
     #[test]
@@ -119,7 +150,7 @@ mod tests {
         let a: Vec<f32> = (0..384).map(|i| i as f32 * 0.01).collect();
         let b: Vec<f32> = (0..384).map(|i| (i + 1) as f32 * 0.01).collect();
 
-        let dist_simd = l2_distance_simd(&a, &b);
+        let dist_simd = l2_distance_simd(&a, &b).unwrap();
 
         // Compare with scalar implementation
         let dist_scalar: f32 = a

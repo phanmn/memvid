@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::error::{MemvidError, Result};
 use crate::io::header::HeaderCodec;
-use crate::io::time_index::{calculate_checksum as time_index_checksum, read_track};
+use crate::io::time_index::read_track_verified;
 use crate::io::wal::EmbeddedWal;
 use crate::memvid::lifecycle::{ensure_single_file, read_toc, recover_toc, Memvid};
 use crate::types::{
@@ -39,11 +39,11 @@ fn is_doctor_quiet() -> bool {
     DOCTOR_QUIET.with(std::cell::Cell::get)
 }
 
-/// Conditionally print doctor debug messages based on quiet flag.
+/// Conditionally emit doctor debug messages based on quiet flag.
 macro_rules! doctor_log {
     ($($arg:tt)*) => {
         if !is_doctor_quiet() {
-            println!($($arg)*);
+            tracing::info!($($arg)*);
         }
     };
 }
@@ -527,7 +527,7 @@ impl DoctorPlanner {
                 ));
                 return;
             }
-            match read_track(file, manifest.bytes_offset, manifest.bytes_length) {
+            match read_track_verified(file, manifest.bytes_offset, manifest.bytes_length, manifest.checksum) {
                 Ok(entries) => {
                     doctor_log!("doctor: time index read {} entries", entries.len());
                     probe.index.time_expected_entries = manifest.entry_count;
@@ -542,17 +542,9 @@ impl DoctorPlanner {
                             ),
                         ));
                     }
-                    let checksum = time_index_checksum(&entries);
-                    if checksum != manifest.checksum {
-                        probe.index.needs_time = true;
-                        probe.findings.push(DoctorFinding::warning(
-                            DoctorFindingCode::TimeIndexChecksumMismatch,
-                            "time index checksum mismatch".to_string(),
-                        ));
-                    }
                 }
                 Err(err) => {
-                    doctor_log!("doctor: read_track failed: {}", err);
+                    doctor_log!("doctor: read_track_verified failed: {}", err);
                     probe.index.needs_time = true;
                     probe.findings.push(DoctorFinding::warning(
                         DoctorFindingCode::TimeIndexChecksumMismatch,
@@ -1478,7 +1470,7 @@ impl DoctorExecutor {
 
         // Verify footer_offset wasn't corrupted
         if mem.header.footer_offset != footer_offset_after_rebuild {
-            eprintln!(
+            tracing::warn!(
                 "FATAL: footer_offset corrupted during WAL reset: expected {}, got {}",
                 footer_offset_after_rebuild, mem.header.footer_offset
             );

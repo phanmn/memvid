@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
-use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::lex::{LexIndex, LexIndexArtifact, LexIndexBuilder};
 use crate::memvid::lifecycle::Memvid;
@@ -96,10 +95,19 @@ impl Memvid {
                 return Ok(());
             }
 
+            // Copy manifest fields before mutable borrow via read_range
+            let m_offset = manifest.bytes_offset;
+            let m_length = manifest.bytes_length;
+
             let bytes =
-                if let Ok(bytes) = self.read_range(manifest.bytes_offset, manifest.bytes_length) {
+                if let Ok(bytes) = self.read_range(m_offset, m_length) {
                     bytes
                 } else {
+                    let msg = format!(
+                        "failed to read lex index from manifest (offset={m_offset}, length={m_length}); index will be unavailable until next rebuild"
+                    );
+                    tracing::warn!("{msg}");
+                    self.index_load_errors.push(msg);
                     // Don't disable lex if loading fails - keep it enabled
                     self.lex_index = None;
                     return Ok(());
@@ -109,7 +117,12 @@ impl Memvid {
                     self.hydrate_lex_index_metadata(&mut index);
                     self.lex_index = Some(index);
                 }
-                Err(_) => {
+                Err(err) => {
+                    let msg = format!(
+                        "failed to decode lex index: {err}; index will be unavailable until next rebuild"
+                    );
+                    tracing::warn!("{msg}");
+                    self.index_load_errors.push(msg);
                     // Don't disable lex if decoding fails - keep it enabled
                     // CRITICAL: Don't modify self.toc during read-only operations!
                     // If dirty=true and Drop commits, it will corrupt the manifest.
@@ -133,23 +146,36 @@ impl Memvid {
                 return Ok(());
             }
 
+            // Copy manifest fields before mutable borrow via read_range
+            let m_offset = manifest.bytes_offset;
+            let m_length = manifest.bytes_length;
+
             let bytes =
-                if let Ok(bytes) = self.read_range(manifest.bytes_offset, manifest.bytes_length) {
+                if let Ok(bytes) = self.read_range(m_offset, m_length) {
                     bytes
                 } else {
+                    let msg = format!(
+                        "failed to read vec index from manifest (offset={m_offset}, length={m_length}); index will be unavailable until next rebuild"
+                    );
+                    tracing::warn!("{msg}");
+                    self.index_load_errors.push(msg);
                     self.vec_index = None;
                     // Don't disable vec if loading fails - keep it enabled
                     // self.vec_enabled = false;
                     return Ok(());
                 };
-            match catch_unwind(AssertUnwindSafe(|| VecIndex::decode(&bytes))) {
-                Ok(Ok(index)) => self.vec_index = Some(index),
-                Ok(Err(_)) | Err(_) => {
+            match VecIndex::decode(&bytes) {
+                Ok(index) => self.vec_index = Some(index),
+                Err(err) => {
+                    let msg = format!(
+                        "failed to decode vec index: {err}; index will be unavailable until next rebuild"
+                    );
+                    tracing::warn!("{msg}");
+                    self.index_load_errors.push(msg);
                     self.vec_index = None;
                     // Don't disable vec if decoding fails - keep it enabled
                     // CRITICAL: Don't modify self.toc during read-only operations!
                     // If dirty=true and Drop commits, it will corrupt the manifest.
-                    // self.vec_enabled = false;
                 }
             }
         } else {
@@ -176,9 +202,10 @@ impl Memvid {
                     self.clip_index = None;
                     return Ok(());
                 };
-            match catch_unwind(AssertUnwindSafe(|| ClipIndex::decode(&bytes))) {
-                Ok(Ok(index)) => self.clip_index = Some(index),
-                Ok(Err(_)) | Err(_) => {
+            match ClipIndex::decode(&bytes) {
+                Ok(index) => self.clip_index = Some(index),
+                Err(err) => {
+                    tracing::debug!(error = %err, "clip index decode failed");
                     self.clip_index = None;
                 }
             }

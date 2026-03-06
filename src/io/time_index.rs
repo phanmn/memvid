@@ -128,6 +128,27 @@ pub fn read_track<R: Read + Seek>(
     Ok(entries)
 }
 
+/// Reads the time index entries and verifies the BLAKE3 checksum matches.
+///
+/// Calls [`read_track`] internally, then computes [`calculate_checksum`] over
+/// the returned entries and compares against `expected_checksum`.  Returns
+/// `Err(MemvidError::ChecksumMismatch)` on mismatch.
+pub fn read_track_verified<R: Read + Seek>(
+    reader: &mut R,
+    offset: u64,
+    length: u64,
+    expected_checksum: [u8; 32],
+) -> Result<Vec<TimeIndexEntry>> {
+    let entries = read_track(reader, offset, length)?;
+    let actual = calculate_checksum(&entries);
+    if actual != expected_checksum {
+        return Err(MemvidError::ChecksumMismatch {
+            context: "time index",
+        });
+    }
+    Ok(entries)
+}
+
 /// Calculates the checksum for the provided entries in canonical order.
 #[must_use]
 pub fn calculate_checksum(entries: &[TimeIndexEntry]) -> [u8; 32] {

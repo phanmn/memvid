@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::io::time_index::read_track as time_index_read;
+use crate::io::time_index::read_track_verified as time_index_read;
 use crate::memvid::lifecycle::Memvid;
 use crate::types::{
     DoctorOptions, DoctorPlan, DoctorReport, VerificationCheck, VerificationReport,
@@ -28,7 +28,7 @@ impl Memvid {
 
         // Time index integrity
         if let Some(manifest) = mem.toc.time_index.clone() {
-            match time_index_read(&mut mem.file, manifest.bytes_offset, manifest.bytes_length) {
+            match time_index_read(&mut mem.file, manifest.bytes_offset, manifest.bytes_length, manifest.checksum) {
                 Ok(entries) => {
                     if manifest.entry_count == entries.len() as u64 {
                         push_check("TimeIndexEntryCount", VerificationStatus::Passed, None);

@@ -119,6 +119,7 @@ impl Memvid {
             clip_image_count,
             lex_enabled: self.lex_enabled,
             vec_enabled: self.vec_enabled,
+            index_load_errors: self.index_load_errors.clone(),
         })
     }
 

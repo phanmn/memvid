@@ -4,6 +4,8 @@ use std::{marker::PhantomData, path::PathBuf};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::error::MemvidError;
+
 /// Frame IDs are dense u64 indexes into the frame list.
 pub type FrameId = u64;
 
@@ -18,12 +20,15 @@ pub enum CanonicalEncoding {
 }
 
 impl CanonicalEncoding {
-    #[must_use]
-    pub const fn from_byte(value: u8) -> Self {
+    /// Parse a byte into a `CanonicalEncoding`.
+    ///
+    /// # Errors
+    /// Returns `MemvidError::UnknownEncoding` for unrecognized byte values.
+    pub fn from_byte(value: u8) -> Result<Self, MemvidError> {
         match value {
-            0 => CanonicalEncoding::Plain,
-            1 => CanonicalEncoding::Zstd,
-            _ => CanonicalEncoding::Plain,
+            0 => Ok(CanonicalEncoding::Plain),
+            1 => Ok(CanonicalEncoding::Zstd),
+            _ => Err(MemvidError::UnknownEncoding(value)),
         }
     }
 
@@ -57,7 +62,9 @@ impl<'de> Deserialize<'de> for CanonicalEncoding {
         D: Deserializer<'de>,
     {
         let value = u32::deserialize(deserializer)?;
-        Ok(CanonicalEncoding::from_byte((value & 0xFF) as u8))
+        #[allow(clippy::cast_possible_truncation)]
+        let byte = (value & 0xFF) as u8;
+        CanonicalEncoding::from_byte(byte).or(Ok(CanonicalEncoding::default()))
     }
 }
 
@@ -220,26 +227,32 @@ mod tests {
 
     #[test]
     fn canonical_encoding_from_byte_round_trips() {
-        assert_eq!(CanonicalEncoding::from_byte(0), CanonicalEncoding::Plain);
-        assert_eq!(CanonicalEncoding::from_byte(1), CanonicalEncoding::Zstd);
+        assert_eq!(
+            CanonicalEncoding::from_byte(0).unwrap(),
+            CanonicalEncoding::Plain
+        );
+        assert_eq!(
+            CanonicalEncoding::from_byte(1).unwrap(),
+            CanonicalEncoding::Zstd
+        );
         assert_eq!(CanonicalEncoding::Plain.as_byte(), 0);
         assert_eq!(CanonicalEncoding::Zstd.as_byte(), 1);
         // Round-trip
         assert_eq!(
-            CanonicalEncoding::from_byte(CanonicalEncoding::Plain.as_byte()),
+            CanonicalEncoding::from_byte(CanonicalEncoding::Plain.as_byte()).unwrap(),
             CanonicalEncoding::Plain
         );
         assert_eq!(
-            CanonicalEncoding::from_byte(CanonicalEncoding::Zstd.as_byte()),
+            CanonicalEncoding::from_byte(CanonicalEncoding::Zstd.as_byte()).unwrap(),
             CanonicalEncoding::Zstd
         );
     }
 
     #[test]
-    fn canonical_encoding_unknown_byte_defaults_to_plain() {
-        assert_eq!(CanonicalEncoding::from_byte(2), CanonicalEncoding::Plain);
-        assert_eq!(CanonicalEncoding::from_byte(42), CanonicalEncoding::Plain);
-        assert_eq!(CanonicalEncoding::from_byte(255), CanonicalEncoding::Plain);
+    fn canonical_encoding_unknown_byte_returns_error() {
+        assert!(CanonicalEncoding::from_byte(2).is_err());
+        assert!(CanonicalEncoding::from_byte(42).is_err());
+        assert!(CanonicalEncoding::from_byte(255).is_err());
     }
 
     #[test]

@@ -219,6 +219,34 @@ pub enum MemvidError {
 
     #[error("Schema validation failed: {reason}")]
     SchemaValidation { reason: String },
+
+    /// Vector dimensions do not match for distance computation or index insertion.
+    #[error("dimension mismatch: expected {expected}, got {got}")]
+    DimensionMismatch { expected: usize, got: usize },
+
+    /// WAL sequence number overflow (practically unreachable with u64).
+    #[error("WAL sequence number overflow")]
+    WalOverflow,
+
+    /// Unrecognized encoding byte in frame metadata.
+    #[error("unknown encoding byte: {0:#04x}")]
+    UnknownEncoding(u8),
+
+    /// Index contains invalid internal references.
+    #[error("corrupted index: {0}")]
+    IndexCorrupted(String),
+
+    /// Input file exceeds size limit.
+    #[error("file too large: {path} is {size} bytes (limit: {limit})")]
+    FileTooLarge { path: String, size: u64, limit: u64 },
+
+    /// Decompressed entry exceeds size limit.
+    #[error("decompression limit exceeded for entry '{entry}': {size} bytes (limit: {limit})")]
+    DecompressionTooLarge { entry: String, size: u64, limit: u64 },
+
+    /// Cannot downgrade to shared mode while uncommitted changes exist.
+    #[error("downgrade blocked: uncommitted changes present")]
+    DowngradeBlocked,
 }
 
 impl From<std::io::Error> for MemvidError {

@@ -32,6 +32,7 @@ hex = "0.4.3"
 # extractous uses GraalVM native compilation which doesn't work on Windows ARM or WSL2 on ARM
 # Enable with --features extractous for full document extraction (PDF, DOCX, etc.)
 extractous = { version = "0.3", optional = true }
+secrecy = "0.10"
 regex = "1.11.1"
 time = { version = "0.3.36", features = ["formatting", "parsing"] }
 chrono = { version = "0.4.42", features = ["serde"] }

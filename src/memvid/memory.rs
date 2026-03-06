@@ -33,7 +33,6 @@ pub struct SchemaSummaryEntry {
 
 /// Internal stats for predicate inference.
 struct PredicateStats {
-    _entity_count: usize,
     value_count: usize,
     unique_values: std::collections::HashSet<String>,
     entities: std::collections::HashSet<String>,
@@ -522,7 +521,6 @@ impl Memvid {
                     predicate_stats
                         .entry(card.slot.clone())
                         .or_insert_with(|| PredicateStats {
-                            _entity_count: 0,
                             value_count: 0,
                             unique_values: std::collections::HashSet::new(),
                             entities: std::collections::HashSet::new(),

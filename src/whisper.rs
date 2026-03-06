@@ -937,11 +937,19 @@ mod inference {
                 // Build suppression mask
                 let suppress_tokens = &self.config.suppress_tokens;
 
+                let mut flush_kv_cache = true;
+
                 for i in 0..sample_len {
                     // For autoregressive decoding with KV cache:
                     // - First iteration: pass all prompt tokens, flush_kv_cache=true
-                    // - Subsequent iterations: pass only the new token, flush_kv_cache=false
-                    let tokens_tensor = Tensor::new(all_tokens.as_slice(), &self.device)
+                    // - Subsequent iterations: pass only the last token, flush_kv_cache=false
+                    let input_tokens = if flush_kv_cache {
+                        all_tokens.as_slice()
+                    } else {
+                        // After first iteration, only feed the newly generated token
+                        &all_tokens[all_tokens.len() - 1..]
+                    };
+                    let tokens_tensor = Tensor::new(input_tokens, &self.device)
                         .and_then(|t| t.unsqueeze(0))
                         .map_err(|e| WhisperError::InferenceError {
                             cause: format!("Failed to create tokens tensor: {}", e),
@@ -951,18 +959,19 @@ mod inference {
                         tracing::info!(
                             step = i,
                             all_tokens_len = all_tokens.len(),
+                            input_tokens_len = input_tokens.len(),
+                            flush_kv_cache = flush_kv_cache,
                             tokens_shape = ?tokens_tensor.shape(),
                             "Decoder input"
                         );
                     }
 
                     // Get hidden states from decoder, then project to vocabulary
-                    // Always pass all tokens (candle doesn't use KV cache the same way as PyTorch)
                     let logits = match &mut self.model {
                         Model::Normal(m) => {
                             let hidden = m
                                 .decoder
-                                .forward(&tokens_tensor, &audio_features, true)
+                                .forward(&tokens_tensor, &audio_features, flush_kv_cache)
                                 .map_err(|e| WhisperError::InferenceError {
                                 cause: format!("Decoder forward failed: {}", e),
                             })?;
@@ -975,7 +984,7 @@ mod inference {
                         Model::Quantized(m) => {
                             let hidden = m
                                 .decoder
-                                .forward(&tokens_tensor, &audio_features, true)
+                                .forward(&tokens_tensor, &audio_features, flush_kv_cache)
                                 .map_err(|e| WhisperError::InferenceError {
                                 cause: format!("Decoder forward failed: {}", e),
                             })?;
@@ -986,6 +995,9 @@ mod inference {
                             })?
                         }
                     };
+
+                    // After first pass, reuse the KV cache
+                    flush_kv_cache = false;
 
                     if chunk_idx == 0 && i == 0 {
                         tracing::info!(

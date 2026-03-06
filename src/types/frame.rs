@@ -144,6 +144,9 @@ pub struct Stats {
     /// Whether the vec (vector/semantic) search engine is enabled at runtime.
     #[serde(default)]
     pub vec_enabled: bool,
+    /// Errors encountered while loading indices (empty when all indices loaded successfully).
+    #[serde(default)]
+    pub index_load_errors: Vec<String>,
 }
 
 /// Entry returned by `timeline` queries, carrying a lightweight preview.
@@ -487,6 +490,9 @@ mod tests {
             time_index_bytes: 0,
             vector_count: 0,
             clip_image_count: 0,
+            lex_enabled: false,
+            vec_enabled: false,
+            index_load_errors: Vec::new(),
         };
         assert_eq!(stats.frame_count, 0);
         assert_eq!(stats.tier, Tier::Free);

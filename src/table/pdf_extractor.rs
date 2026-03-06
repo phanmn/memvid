@@ -16,6 +16,16 @@ use super::types::{
 };
 use crate::error::Result;
 use regex::Regex;
+use std::sync::LazyLock;
+
+static CURRENCY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\$?[\d,]+\.?\d*$").unwrap());
+static DATE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap());
+static PERCENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d+\.?\d*%$").unwrap());
+static HOURS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d+\.?\d*\s*(hrs?|hours?)$").unwrap());
 
 /// Minimum line length to consider for grid detection (in points).
 const MIN_LINE_LENGTH: f32 = 20.0;
@@ -672,12 +682,6 @@ fn detect_table_regions<'a>(
 ) -> Vec<LineBasedTableRegion> {
     let mut regions = Vec::new();
 
-    // Patterns for detecting table-like content
-    let currency_re = Regex::new(r"^\$?[\d,]+\.?\d*$").unwrap();
-    let date_re = Regex::new(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$").unwrap();
-    let percent_re = Regex::new(r"^\d+\.?\d*%$").unwrap();
-    let hours_re = Regex::new(r"^\d+\.?\d*\s*(hrs?|hours?)$").unwrap();
-
     // Common table section headers (case-insensitive patterns)
     let section_headers = [
         "earnings",
@@ -728,10 +732,7 @@ fn detect_table_regions<'a>(
                 lines,
                 i,
                 Some(line.to_string()),
-                &currency_re,
-                &date_re,
-                &percent_re,
-                &hours_re,
+                &CURRENCY_RE,
                 options,
             );
 
@@ -745,7 +746,7 @@ fn detect_table_regions<'a>(
         } else {
             // Check if current line looks like tabular data
             let looks_like_data =
-                is_tabular_data_line(line, &currency_re, &date_re, &percent_re, &hours_re);
+                is_tabular_data_line(line, &CURRENCY_RE, &DATE_RE, &PERCENT_RE, &HOURS_RE);
 
             if looks_like_data {
                 // Try to collect a table region without explicit header
@@ -753,10 +754,7 @@ fn detect_table_regions<'a>(
                     lines,
                     i,
                     None,
-                    &currency_re,
-                    &date_re,
-                    &percent_re,
-                    &hours_re,
+                    &CURRENCY_RE,
                     options,
                 );
 
@@ -820,9 +818,6 @@ fn collect_table_region(
     start: usize,
     header: Option<String>,
     currency_re: &Regex,
-    date_re: &Regex,
-    _percent_re: &Regex,
-    _hours_re: &Regex,
     options: &TableExtractionOptions,
 ) -> (Option<LineBasedTableRegion>, usize) {
     let mut data_lines = Vec::new();
@@ -862,7 +857,7 @@ fn collect_table_region(
     }
 
     // Try to determine column structure
-    let col_count = infer_column_count(&data_lines, currency_re, date_re);
+    let col_count = infer_column_count(&data_lines, currency_re);
 
     if col_count < options.min_cols {
         return (None, consumed);
@@ -880,7 +875,7 @@ fn collect_table_region(
 }
 
 /// Infer the number of columns from data patterns.
-fn infer_column_count(lines: &[String], currency_re: &Regex, _date_re: &Regex) -> usize {
+fn infer_column_count(lines: &[String], currency_re: &Regex) -> usize {
     // For key-value style tables (common in pay stubs), assume 2 columns
     // Look for patterns: Label on one line, Value on next
 
@@ -959,19 +954,18 @@ fn build_line_based_table(
 
     // Group lines into rows (label + value pairs for 2-col tables)
     let mut row_idx = rows.len();
-    let currency_re = Regex::new(r"^\$?[\d,]+\.?\d*$").unwrap();
 
     let mut i = 0;
     while i < region.data_lines.len() {
         let line1 = region.data_lines[i].trim();
 
         // Try to detect label-value pair
-        let is_label = !currency_re.is_match(line1) && line1.parse::<f64>().is_err();
+        let is_label = !CURRENCY_RE.is_match(line1) && line1.parse::<f64>().is_err();
 
         if is_label && i + 1 < region.data_lines.len() {
             let line2 = region.data_lines[i + 1].trim();
             let is_value =
-                currency_re.is_match(line2) || line2.parse::<f64>().is_ok() || line2.contains('$');
+                CURRENCY_RE.is_match(line2) || line2.parse::<f64>().is_ok() || line2.contains('$');
 
             if is_value {
                 // Create 2-column row
