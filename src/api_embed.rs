@@ -93,23 +93,24 @@ fn is_insecure_http_url(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("http://") else {
         return false;
     };
-    // Extract the authority (host + optional port) before the first slash.
-    let authority = rest.split('/').next().unwrap_or_default();
-    let host = if let Some(stripped) = authority.strip_prefix('[') {
+    // Strip path, query, and fragment to isolate the authority.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    // Strip userinfo (e.g. "user:pass@host").
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host = if let Some(stripped) = host_port.strip_prefix('[') {
         // IPv6 bracket notation: [::1]:8080
         stripped.split(']').next().unwrap_or_default()
     } else {
         // IPv4 or hostname: localhost:8080
-        authority.split(':').next().unwrap_or_default()
+        host_port.split(':').next().unwrap_or_default()
     };
-    !matches!(host, "localhost" | "127.0.0.1" | "::1")
+    !matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1")
 }
 
 /// Emit a warning if the URL uses HTTP instead of HTTPS (excluding localhost).
 fn warn_if_insecure_url(url: &str) {
     if is_insecure_http_url(url) {
         tracing::warn!(
-            url = %url,
             "API base URL uses HTTP instead of HTTPS; credentials may be transmitted in plaintext"
         );
     }
@@ -179,7 +180,6 @@ impl OpenAIConfig {
     #[must_use]
     pub fn with_base_url(mut self, url: impl Into<String>) -> Self {
         self.base_url = url.into();
-        warn_if_insecure_url(&self.base_url);
         self
     }
 
@@ -640,6 +640,18 @@ mod tests {
         assert!(!is_insecure_http_url("http://[::1]"));
         assert!(!is_insecure_http_url("http://[::1]:9090/v1"));
 
+        // Case-insensitive host matching
+        assert!(!is_insecure_http_url("http://LOCALHOST"));
+        assert!(!is_insecure_http_url("http://Localhost:8080/v1"));
+
+        // Userinfo in URL
+        assert!(!is_insecure_http_url("http://user@localhost/v1"));
+        assert!(!is_insecure_http_url("http://user:pass@127.0.0.1:8080"));
+
+        // Query and fragment on loopback
+        assert!(!is_insecure_http_url("http://localhost?health=1"));
+        assert!(!is_insecure_http_url("http://localhost#section"));
+
         // HTTPS is never insecure
         assert!(!is_insecure_http_url("https://api.openai.com/v1"));
 
@@ -650,5 +662,8 @@ mod tests {
         // Subdomain spoofing must NOT bypass the check
         assert!(is_insecure_http_url("http://localhost.evil.com"));
         assert!(is_insecure_http_url("http://127.0.0.1.evil.com"));
+
+        // Userinfo on remote host is still insecure
+        assert!(is_insecure_http_url("http://user@example.com/v1"));
     }
 }

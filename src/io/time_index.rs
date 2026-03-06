@@ -295,6 +295,11 @@ mod tests {
 
         let err = read_track_verified(&mut file, offset, length, checksum)
             .expect_err("checksum mismatch");
-        assert!(matches!(err, MemvidError::ChecksumMismatch { .. }));
+        match err {
+            MemvidError::ChecksumMismatch { context } => {
+                assert_eq!(context, "time index");
+            }
+            other => panic!("expected ChecksumMismatch, got: {other:?}"),
+        }
     }
 }
