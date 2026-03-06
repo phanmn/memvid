@@ -10,7 +10,6 @@ use std::collections::BTreeMap;
 use serde_json::json;
 
 use super::types::{ExtractedTable, TableQuality, TableSummary};
-use crate::VecEmbedder;
 use crate::error::{MemvidError, Result};
 use crate::memvid::Memvid;
 use crate::types::embedding_identity::{
@@ -18,6 +17,7 @@ use crate::types::embedding_identity::{
     MEMVID_EMBEDDING_NORMALIZED_KEY, MEMVID_EMBEDDING_PROVIDER_KEY,
 };
 use crate::types::{FrameId, PutOptions};
+use crate::VecEmbedder;
 
 /// Track name used for table frames.
 pub const TABLE_TRACK: &str = "tables";

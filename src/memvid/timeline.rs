@@ -1,6 +1,6 @@
 //! Timeline assembly helpers for `Memvid`.
 
-use crate::io::time_index::{TimeIndexEntry, read_track as time_index_read};
+use crate::io::time_index::{read_track as time_index_read, TimeIndexEntry};
 use crate::memvid::lifecycle::Memvid;
 #[cfg(feature = "temporal_track")]
 use crate::memvid::search::frame_ids_for_temporal_filter;
@@ -15,7 +15,7 @@ use crate::Result;
 use std::collections::HashSet;
 use std::num::NonZeroU64;
 #[cfg(feature = "temporal_track")]
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub(crate) fn build_timeline(
     memvid: &mut Memvid,

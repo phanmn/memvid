@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
-use quick_xml::Reader as XmlReader;
 use quick_xml::events::Event;
+use quick_xml::Reader as XmlReader;
 use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
 

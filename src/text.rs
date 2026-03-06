@@ -301,7 +301,7 @@ mod tests {
         // Single orphan chars get joined with adjacent words
         assert_eq!(fix_pdf_spacing("lo n ger"), "longer");
         assert_eq!(fix_pdf_spacing("n o"), "no"); // both single chars, both orphans
-        // These are best-effort heuristics - SymSpell handles complex cases better
+                                                  // These are best-effort heuristics - SymSpell handles complex cases better
         let result = fix_pdf_spacing("rep o rted");
         assert!(
             result == "reported" || result.contains("rep"),

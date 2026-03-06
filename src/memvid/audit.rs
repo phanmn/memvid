@@ -244,7 +244,7 @@ impl From<AskMode> for crate::AskRetriever {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PutOptions, run_serial_test};
+    use crate::{run_serial_test, PutOptions};
     use tempfile::tempdir;
 
     #[test]

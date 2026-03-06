@@ -3,7 +3,7 @@
 #[cfg(feature = "temporal_track")]
 use super::helpers::attach_temporal_metadata;
 use super::helpers::{build_context, empty_search_response, parse_cursor, timestamp_to_rfc3339};
-use crate::lex::{LexMatch, compute_snippet_slices};
+use crate::lex::{compute_snippet_slices, LexMatch};
 use crate::memvid::lifecycle::Memvid;
 use crate::search::{EvaluationContext, ParsedQuery};
 use crate::types::{

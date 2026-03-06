@@ -216,7 +216,7 @@ fn extract_dates(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AutoTagger, extract_dates};
+    use super::{extract_dates, AutoTagger};
 
     #[test]
     fn produces_keywords_and_labels() {

@@ -12,8 +12,8 @@
 
 use crate::memvid::lifecycle::Memvid;
 use crate::types::{
-    DEFAULT_HAMMING_THRESHOLD, FrameId, QuerySketch, SketchEntry, SketchTrack, SketchTrackStats,
-    SketchVariant, generate_sketch,
+    generate_sketch, FrameId, QuerySketch, SketchEntry, SketchTrack, SketchTrackStats,
+    SketchVariant, DEFAULT_HAMMING_THRESHOLD,
 };
 
 /// Result of a sketch candidate search.

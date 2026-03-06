@@ -11,13 +11,12 @@ use crate::error::{MemvidError, Result};
 use crate::io::header::HeaderCodec;
 use crate::io::time_index::{calculate_checksum as time_index_checksum, read_track};
 use crate::io::wal::EmbeddedWal;
-use crate::memvid::lifecycle::{Memvid, ensure_single_file, read_toc, recover_toc};
+use crate::memvid::lifecycle::{ensure_single_file, read_toc, recover_toc, Memvid};
 use crate::types::{
-    DOCTOR_PLAN_VERSION, DoctorActionDetail, DoctorActionKind, DoctorActionPlan,
-    DoctorActionReport, DoctorActionStatus, DoctorFinding, DoctorFindingCode, DoctorMetrics,
-    DoctorOptions, DoctorPhaseDuration, DoctorPhaseKind, DoctorPhasePlan, DoctorPhaseReport,
-    DoctorPhaseStatus, DoctorPlan, DoctorReport, DoctorStatus, VerificationReport,
-    VerificationStatus,
+    DoctorActionDetail, DoctorActionKind, DoctorActionPlan, DoctorActionReport, DoctorActionStatus,
+    DoctorFinding, DoctorFindingCode, DoctorMetrics, DoctorOptions, DoctorPhaseDuration,
+    DoctorPhaseKind, DoctorPhasePlan, DoctorPhaseReport, DoctorPhaseStatus, DoctorPlan,
+    DoctorReport, DoctorStatus, VerificationReport, VerificationStatus, DOCTOR_PLAN_VERSION,
 };
 use crate::types::{Header, Toc};
 
@@ -1601,7 +1600,7 @@ impl DoctorExecutor {
         doctor_log!("doctor: [Tier 2] Footer not at expected location, scanning backwards...");
 
         // Scan backwards from near end of file
-        const MAX_SCAN: u64 = 100_000_000; // Scan last 100MB max
+        const MAX_SCAN: u64 = 500_000_000; // Scan last 500MB max
         let scan_start = file_size.saturating_sub(MAX_SCAN);
 
         for offset in (scan_start..file_size.saturating_sub(FOOTER_SIZE)).rev() {

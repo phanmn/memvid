@@ -1,18 +1,18 @@
 //! Persistent manifest structures describing segments, indices, and TOC.
 
 use serde::{
-    Deserialize, Serialize,
     de::{self, SeqAccess, Visitor},
     ser::SerializeStruct,
+    Deserialize, Serialize,
 };
 
 use super::{common::FrameId, frame::Frame, ticket::TicketRef};
 
 use std::{fmt, marker::PhantomData};
 
-const MAX_TOC_SEGMENTS: usize = 1_000_000;
-const MAX_TOC_FRAMES: usize = 10_000_000;
-const MAX_SEGMENT_CATALOG_ENTRIES: usize = 1_000_000;
+const MAX_TOC_SEGMENTS: usize = 10_000_000;
+const MAX_TOC_FRAMES: usize = 100_000_000;
+const MAX_SEGMENT_CATALOG_ENTRIES: usize = 10_000_000;
 
 fn deserialize_vec_bounded<'de, D, T, const LIMIT: usize>(
     deserializer: D,

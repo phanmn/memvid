@@ -15,8 +15,8 @@ use super::{
 };
 #[cfg(feature = "parallel_segments")]
 use crate::{
-    MemvidError, Result,
     types::{PutOptions, SegmentKind, SegmentSpan, SegmentStats, VecIndexManifest},
+    MemvidError, Result,
 };
 
 #[cfg(feature = "parallel_segments")]
@@ -24,9 +24,9 @@ const DEFAULT_SEGMENT_TOKENS: usize = 2_048;
 #[cfg(feature = "parallel_segments")]
 const DEFAULT_SEGMENT_PAGES: usize = 4;
 #[cfg(feature = "parallel_segments")]
-const DEFAULT_MEMORY_CAP_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GiB
+const DEFAULT_MEMORY_CAP_BYTES: u64 = 16 * 1024 * 1024 * 1024; // 16 GiB
 #[cfg(feature = "parallel_segments")]
-const DEFAULT_QUEUE_DEPTH: usize = 64;
+const DEFAULT_QUEUE_DEPTH: usize = 256;
 
 #[cfg(feature = "parallel_segments")]
 #[derive(Debug, Clone)]
@@ -320,7 +320,7 @@ impl Memvid {
 #[cfg(all(test, feature = "parallel_segments"))]
 mod tests {
     use super::*;
-    use crate::{MemvidError, memvid::lifecycle::Memvid, run_serial_test};
+    use crate::{memvid::lifecycle::Memvid, run_serial_test, MemvidError};
     use tempfile::tempdir;
 
     #[test]

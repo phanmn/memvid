@@ -2,12 +2,12 @@ use std::io::Cursor;
 
 use calamine::{DataType, Reader as CalamineReader, Xlsx};
 
-use super::xlsx_chunker::{XlsxChunkingOptions, chunk_workbook, generate_flat_text};
-use super::xlsx_ooxml::{OoxmlMetadata, parse_ooxml_metadata};
-use super::xlsx_table_detect::{CellValue, DetectedTable, SheetGrid, detect_tables};
+use super::xlsx_chunker::{chunk_workbook, generate_flat_text, XlsxChunkingOptions};
+use super::xlsx_ooxml::{parse_ooxml_metadata, OoxmlMetadata};
+use super::xlsx_table_detect::{detect_tables, CellValue, DetectedTable, SheetGrid};
 use crate::{
-    DocumentFormat, DocumentReader, PassthroughReader, ReaderDiagnostics, ReaderHint, ReaderOutput,
-    Result, types::structure::ChunkingResult,
+    types::structure::ChunkingResult, DocumentFormat, DocumentReader, PassthroughReader,
+    ReaderDiagnostics, ReaderHint, ReaderOutput, Result,
 };
 
 /// Result of the structured XLSX extraction pipeline.

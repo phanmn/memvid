@@ -1,5 +1,5 @@
-use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Serialize;
 use std::convert::TryInto;

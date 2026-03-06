@@ -13,7 +13,7 @@ use blake3::hash;
 use serde::{Deserialize, Serialize};
 
 use crate::vec::VecSearchHit;
-use crate::{MemvidError, Result, types::FrameId};
+use crate::{types::FrameId, MemvidError, Result};
 
 fn vec_config() -> impl bincode::config::Config {
     bincode::config::standard()

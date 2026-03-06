@@ -6,12 +6,12 @@ use super::engine::TantivyEngine;
 use super::util::{combine_should_queries, to_search_value};
 use crate::search::parser::{Expr, FieldTerm, ParsedQuery, Term as ParsedTerm, TextTerm};
 use crate::{MemvidError, Result};
-use tantivy::Term;
 use tantivy::query::{
     AllQuery, BooleanQuery, Occur, PhraseQuery, Query, RangeQuery, RegexQuery, TermQuery,
     TermSetQuery,
 };
 use tantivy::schema::IndexRecordOption;
+use tantivy::Term;
 
 pub(super) fn build_root_query(
     engine: &TantivyEngine,

@@ -35,7 +35,7 @@
 mod chunker;
 mod detector;
 
-pub use chunker::{StructuralChunker, chunk_structured, chunk_structured_with_max};
+pub use chunker::{chunk_structured, chunk_structured_with_max, StructuralChunker};
 pub use detector::{detect_ascii_tables, detect_structure};
 
 // Re-export types for convenience

@@ -9,9 +9,9 @@ use tempfile::TempDir;
 
 use crate::memvid::lifecycle::Memvid;
 use crate::types::{
-    AclContext, AclEnforcementMode, AdaptiveConfig, AdaptiveResult, AdaptiveStats,
-    EmbeddingQualityStats, Frame, FrameId, FrameStatus, SearchHit, TimelineEntry, TimelineQuery,
-    VecSegmentDescriptor, compute_embedding_quality, find_adaptive_cutoff,
+    compute_embedding_quality, find_adaptive_cutoff, AclContext, AclEnforcementMode,
+    AdaptiveConfig, AdaptiveResult, AdaptiveStats, EmbeddingQualityStats, Frame, FrameId,
+    FrameStatus, SearchHit, TimelineEntry, TimelineQuery, VecSegmentDescriptor,
 };
 use crate::{LexSearchHit, MemvidError, Result, VecSearchHit};
 
@@ -935,9 +935,9 @@ impl Memvid {
     }
 }
 
-/// Default maximum payload size for text indexing (256 MiB)
+/// Default maximum payload size for text indexing (1 GiB)
 /// Can be overridden via `MEMVID_MAX_INDEX_PAYLOAD` environment variable
-pub const DEFAULT_MAX_INDEX_PAYLOAD: u64 = 256 * 1024 * 1024;
+pub const DEFAULT_MAX_INDEX_PAYLOAD: u64 = 1024 * 1024 * 1024;
 
 /// Get the maximum indexable payload size from environment or use default
 #[must_use]

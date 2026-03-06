@@ -20,11 +20,11 @@ use std::time::{Duration, Instant};
 pub struct PdfReader;
 
 #[cfg(feature = "pdfium")]
-const PDFIUM_MAX_PAGES: u32 = 4_096;
+const PDFIUM_MAX_PAGES: u32 = 16_384;
 #[cfg(feature = "pdfium")]
-const PDFIUM_MAX_DURATION: Duration = Duration::from_secs(10);
+const PDFIUM_MAX_DURATION: Duration = Duration::from_secs(30);
 #[cfg(feature = "pdfium")]
-const PDFIUM_MAX_BYTES: usize = 128 * 1024 * 1024;
+const PDFIUM_MAX_BYTES: usize = 512 * 1024 * 1024;
 
 impl PdfReader {
     #[cfg(not(feature = "pdfium"))]

@@ -17,7 +17,7 @@ const HEADER_SIZE: usize = 56;
 const CHECKSUM_OFFSET: usize = 24;
 const MENTION_RECORD_SIZE: usize = 32; // padded to 32 bytes for alignment
 const ANCHOR_RECORD_SIZE: usize = 24;
-const MAX_TEMPORAL_TRACK_BYTES: u64 = 1 << 34; // 16 GiB safety ceiling
+const MAX_TEMPORAL_TRACK_BYTES: u64 = 1 << 36; // 64 GiB safety ceiling
 
 #[derive(Debug, Clone, Copy)]
 struct RawMention {

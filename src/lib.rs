@@ -144,44 +144,44 @@ mod tests_lex_flag;
 
 #[cfg(feature = "temporal_track")]
 pub use analysis::temporal::{
-    TemporalContext, TemporalNormalizer, TemporalResolution, TemporalResolutionFlag,
-    TemporalResolutionValue, parse_clock_inheritance, parse_week_start,
+    parse_clock_inheritance, parse_week_start, TemporalContext, TemporalNormalizer,
+    TemporalResolution, TemporalResolutionFlag, TemporalResolutionValue,
 };
 // Temporal enrichment for resolving relative time references during ingestion
 #[cfg(feature = "temporal_enrich")]
 pub use analysis::temporal_enrich::{
+    detect_relative_phrases, enrich_chunk, enrich_chunks, enrich_document, resolve_relative_phrase,
     AnchorSource as TemporalEnrichAnchorSource, RelativePhrase, ResolvedTemporal,
-    TemporalAnchorInfo, TemporalAnchorTracker, TemporalEnrichment, detect_relative_phrases,
-    enrich_chunk, enrich_chunks, enrich_document, resolve_relative_phrase,
+    TemporalAnchorInfo, TemporalAnchorTracker, TemporalEnrichment,
 };
 pub use constants::*;
 pub use enrichment_worker::{EnrichmentWorkerConfig, EnrichmentWorkerStats};
 pub use error::{MemvidError, Result};
 pub use extract::{DocumentProcessor, ExtractedDocument, ProcessorConfig};
-pub use footer::{CommitFooter, find_last_valid_footer};
+pub use footer::{find_last_valid_footer, CommitFooter};
 #[cfg(feature = "temporal_track")]
 pub use io::temporal_index::{
     append_track as temporal_track_append, calculate_checksum as temporal_track_checksum,
     read_track as temporal_track_read, window as temporal_track_window,
 };
 pub use io::time_index::{
-    TimeIndexEntry, append_track as time_index_append, calculate_checksum as time_index_checksum,
-    read_track as time_index_read,
+    append_track as time_index_append, calculate_checksum as time_index_checksum,
+    read_track as time_index_read, TimeIndexEntry,
 };
 pub use io::wal::{EmbeddedWal, WalRecord, WalStats};
 pub use lex::{LexIndex, LexIndexArtifact, LexIndexBuilder, LexSearchHit};
 pub use lock::FileLock;
 pub use memvid::{
-    BlobReader, EnrichmentHandle, EnrichmentStats, LockSettings, Memvid, OpenReadOptions,
-    SketchCandidate, SketchSearchOptions, SketchSearchStats,
     mutation::{CommitMode, CommitOptions},
-    start_enrichment_worker, start_enrichment_worker_with_embeddings,
+    start_enrichment_worker, start_enrichment_worker_with_embeddings, BlobReader, EnrichmentHandle,
+    EnrichmentStats, LockSettings, Memvid, OpenReadOptions, SketchCandidate, SketchSearchOptions,
+    SketchSearchStats,
 };
 #[cfg(feature = "parallel_segments")]
 pub use memvid::{BuildOpts, ParallelInput, ParallelPayload};
 pub use models::{
-    ModelManifest, ModelManifestEntry, ModelVerification, ModelVerificationStatus,
-    ModelVerifyOptions, verify_model_dir, verify_models,
+    verify_model_dir, verify_models, ModelManifest, ModelManifestEntry, ModelVerification,
+    ModelVerificationStatus, ModelVerifyOptions,
 };
 pub use reader::{
     DetectedTable, DocumentFormat, DocumentReader, PassthroughReader, PdfReader, ReaderDiagnostics,
@@ -190,52 +190,52 @@ pub use reader::{
 pub use signature::{
     parse_ed25519_public_key_base64, verify_model_manifest, verify_ticket_signature,
 };
-pub use text::{NormalizedText, normalize_text, truncate_at_grapheme_boundary};
+pub use text::{normalize_text, truncate_at_grapheme_boundary, NormalizedText};
 pub use types::{
-    ACL_POLICY_VERSION_KEY, ACL_READ_GROUPS_KEY, ACL_READ_PRINCIPALS_KEY, ACL_READ_ROLES_KEY,
-    ACL_RESOURCE_ID_KEY, ACL_TENANT_ID_KEY, ACL_VISIBILITY_KEY, AclContext, AclEnforcementMode,
-    AskCitation, AskMode, AskRequest, AskResponse, AskRetriever, AskStats, AudioSegmentMetadata,
-    AuditOptions, AuditReport, CanonicalEncoding, DOCTOR_PLAN_VERSION, DocAudioMetadata,
+    AclContext, AclEnforcementMode, AskCitation, AskMode, AskRequest, AskResponse, AskRetriever,
+    AskStats, AudioSegmentMetadata, AuditOptions, AuditReport, CanonicalEncoding, DocAudioMetadata,
     DocExifMetadata, DocGpsMetadata, DocMetadata, DoctorActionDetail, DoctorActionKind,
     DoctorActionPlan, DoctorActionReport, DoctorActionStatus, DoctorFinding, DoctorFindingCode,
     DoctorMetrics, DoctorOptions, DoctorPhaseDuration, DoctorPhaseKind, DoctorPhasePlan,
     DoctorPhaseReport, DoctorPhaseStatus, DoctorPlan, DoctorReport, DoctorSeverity, DoctorStatus,
     EmbeddingIdentity, EmbeddingIdentityCount, EmbeddingIdentitySummary, Frame, FrameId, FrameRole,
-    FrameStatus, Header, IndexManifests, LexIndexManifest, LexSegmentDescriptor,
-    MEMVID_EMBEDDING_DIMENSION_KEY, MEMVID_EMBEDDING_MODEL_KEY, MEMVID_EMBEDDING_NORMALIZED_KEY,
-    MEMVID_EMBEDDING_PROVIDER_KEY, MediaManifest, MemvidHandle, Open, PutManyOpts, PutOptions,
-    PutOptionsBuilder, Sealed, SearchEngineKind, SearchHit, SearchHitMetadata, SearchParams,
-    SearchRequest, SearchResponse, SegmentCatalog, SegmentCommon, SegmentCompression, SegmentMeta,
-    SegmentSpan, SourceSpan, Stats, TextChunkManifest, TextChunkRange, Ticket, TicketRef, Tier,
-    TimeIndexManifest, TimeSegmentDescriptor, TimelineEntry, TimelineQuery, TimelineQueryBuilder,
-    Toc, VecEmbedder, VecIndexManifest, VecSegmentDescriptor, VectorCompression, VerificationCheck,
-    VerificationReport, VerificationStatus,
+    FrameStatus, Header, IndexManifests, LexIndexManifest, LexSegmentDescriptor, MediaManifest,
+    MemvidHandle, Open, PutManyOpts, PutOptions, PutOptionsBuilder, Sealed, SearchEngineKind,
+    SearchHit, SearchHitMetadata, SearchParams, SearchRequest, SearchResponse, SegmentCatalog,
+    SegmentCommon, SegmentCompression, SegmentMeta, SegmentSpan, SourceSpan, Stats,
+    TextChunkManifest, TextChunkRange, Ticket, TicketRef, Tier, TimeIndexManifest,
+    TimeSegmentDescriptor, TimelineEntry, TimelineQuery, TimelineQueryBuilder, Toc, VecEmbedder,
+    VecIndexManifest, VecSegmentDescriptor, VectorCompression, VerificationCheck,
+    VerificationReport, VerificationStatus, ACL_POLICY_VERSION_KEY, ACL_READ_GROUPS_KEY,
+    ACL_READ_PRINCIPALS_KEY, ACL_READ_ROLES_KEY, ACL_RESOURCE_ID_KEY, ACL_TENANT_ID_KEY,
+    ACL_VISIBILITY_KEY, DOCTOR_PLAN_VERSION, MEMVID_EMBEDDING_DIMENSION_KEY,
+    MEMVID_EMBEDDING_MODEL_KEY, MEMVID_EMBEDDING_NORMALIZED_KEY, MEMVID_EMBEDDING_PROVIDER_KEY,
 };
 #[cfg(feature = "temporal_track")]
 pub use types::{
     AnchorSource, SearchHitTemporal, SearchHitTemporalAnchor, SearchHitTemporalMention,
-    TEMPORAL_TRACK_FLAG_HAS_ANCHORS, TEMPORAL_TRACK_FLAG_HAS_MENTIONS, TemporalAnchor,
-    TemporalCapabilities, TemporalFilter, TemporalMention, TemporalMentionFlags,
-    TemporalMentionKind, TemporalTrack, TemporalTrackManifest,
+    TemporalAnchor, TemporalCapabilities, TemporalFilter, TemporalMention, TemporalMentionFlags,
+    TemporalMentionKind, TemporalTrack, TemporalTrackManifest, TEMPORAL_TRACK_FLAG_HAS_ANCHORS,
+    TEMPORAL_TRACK_FLAG_HAS_MENTIONS,
 };
 // Memory card types for structured memory extraction and storage
 pub use types::{
-    EngineStamp, EnrichmentManifest, EnrichmentRecord, MEMORIES_TRACK_MAGIC,
-    MEMORIES_TRACK_VERSION, MemoriesStats, MemoriesTrack, MemoryCard, MemoryCardBuilder,
-    MemoryCardBuilderError, MemoryCardId, MemoryKind, Polarity, SlotIndex, VersionRelation,
+    EngineStamp, EnrichmentManifest, EnrichmentRecord, MemoriesStats, MemoriesTrack, MemoryCard,
+    MemoryCardBuilder, MemoryCardBuilderError, MemoryCardId, MemoryKind, Polarity, SlotIndex,
+    VersionRelation, MEMORIES_TRACK_MAGIC, MEMORIES_TRACK_VERSION,
 };
 // Logic-Mesh types for entity-relationship graph traversal
 pub use types::{
-    EdgeDirection, EntityKind, FollowResult, LOGIC_MESH_MAGIC, LOGIC_MESH_VERSION, LinkType,
-    LogicMesh, LogicMeshManifest, MeshEdge, MeshNode,
+    EdgeDirection, EntityKind, FollowResult, LinkType, LogicMesh, LogicMeshManifest, MeshEdge,
+    MeshNode, LOGIC_MESH_MAGIC, LOGIC_MESH_VERSION,
 };
 // Sketch track types for fast candidate generation
 pub use types::{
-    DEFAULT_HAMMING_THRESHOLD, QuerySketch, SKETCH_TRACK_MAGIC, SKETCH_TRACK_VERSION, SketchEntry,
-    SketchFlags, SketchTrack, SketchTrackHeader, SketchTrackManifest, SketchTrackStats,
-    SketchVariant, build_term_filter, compute_simhash, compute_token_weights, generate_sketch,
-    hash_token, hash_token_u32, read_sketch_track, term_filter_maybe_contains, tokenize_for_sketch,
-    write_sketch_track,
+    build_term_filter, compute_simhash, compute_token_weights, generate_sketch, hash_token,
+    hash_token_u32, read_sketch_track, term_filter_maybe_contains, tokenize_for_sketch,
+    write_sketch_track, QuerySketch, SketchEntry, SketchFlags, SketchTrack, SketchTrackHeader,
+    SketchTrackManifest, SketchTrackStats, SketchVariant, DEFAULT_HAMMING_THRESHOLD,
+    SKETCH_TRACK_MAGIC, SKETCH_TRACK_VERSION,
 };
 // Schema types for predicate validation and type checking
 pub use types::{
@@ -247,16 +247,16 @@ pub use memvid::memory::SchemaSummaryEntry;
 #[cfg(feature = "logic_mesh")]
 pub use analysis::ner::NerModel;
 pub use analysis::ner::{
-    ExtractedEntity, FrameEntities, NER_MODEL_NAME, NER_MODEL_SIZE_MB, NER_MODEL_URL, NER_MODELS,
-    NER_TOKENIZER_URL, NerModelInfo, default_ner_model_info, get_ner_model_info,
-    is_ner_model_installed, ner_model_path, ner_tokenizer_path,
+    default_ner_model_info, get_ner_model_info, is_ner_model_installed, ner_model_path,
+    ner_tokenizer_path, ExtractedEntity, FrameEntities, NerModelInfo, NER_MODELS, NER_MODEL_NAME,
+    NER_MODEL_SIZE_MB, NER_MODEL_URL, NER_TOKENIZER_URL,
 };
 // Enrichment engine types for extracting memory cards from frames
 pub use enrich::{EnrichmentContext, EnrichmentEngine, EnrichmentResult, RulesEngine};
 // Triplet extraction types for automatic SPO extraction
 pub use triplet::{ExtractionMode, ExtractionStats, TripletExtractor};
 // Graph-aware search for hybrid retrieval
-pub use graph_search::{GraphMatcher, QueryPlanner, hybrid_search};
+pub use graph_search::{hybrid_search, GraphMatcher, QueryPlanner};
 // Embedding provider types for vector embedding generation
 pub use types::{
     BatchEmbeddingResult, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderKind,
@@ -276,47 +276,47 @@ pub use vec_pq::{
 // Local text embedding provider - feature-gated
 #[cfg(feature = "vec")]
 pub use text_embed::{
-    LocalTextEmbedder, TEXT_EMBED_MODELS, TextEmbedConfig, TextEmbedModelInfo,
-    default_text_model_info, get_text_model_info,
+    default_text_model_info, get_text_model_info, LocalTextEmbedder, TextEmbedConfig,
+    TextEmbedModelInfo, TEXT_EMBED_MODELS,
 };
 // API-based embedding providers - feature-gated
 #[cfg(feature = "api_embed")]
 pub use api_embed::{
-    OPENAI_MODELS, OpenAIConfig, OpenAIEmbedder, OpenAIModelInfo, default_openai_model_info,
-    get_openai_model_info,
+    default_openai_model_info, get_openai_model_info, OpenAIConfig, OpenAIEmbedder,
+    OpenAIModelInfo, OPENAI_MODELS,
 };
 // CLIP visual embeddings - types always available for serde compatibility
 pub use clip::{
-    CLIP_MODELS, ClipConfig, ClipDocument, ClipEmbeddingProvider, ClipError, ClipIndex,
-    ClipIndexArtifact, ClipIndexBuilder, ClipIndexManifest, ClipModelInfo, ClipSearchHit,
-    ImageInfo, MOBILECLIP_DIMS, SIGLIP_DIMS, default_model_info, filter_junk_images,
-    get_model_info,
+    default_model_info, filter_junk_images, get_model_info, ClipConfig, ClipDocument,
+    ClipEmbeddingProvider, ClipError, ClipIndex, ClipIndexArtifact, ClipIndexBuilder,
+    ClipIndexManifest, ClipModelInfo, ClipSearchHit, ImageInfo, CLIP_MODELS, MOBILECLIP_DIMS,
+    SIGLIP_DIMS,
 };
 // CLIP model inference requires the "clip" feature
 #[cfg(feature = "clip")]
-pub use clip::{ClipModel, calculate_color_variance, get_image_info};
+pub use clip::{calculate_color_variance, get_image_info, ClipModel};
 // Whisper audio transcription - types always available
 pub use whisper::{
-    TranscriptionResult, TranscriptionSegment, WHISPER_MODELS, WhisperConfig, WhisperError,
-    WhisperModelInfo, default_whisper_model_info, get_whisper_model_info,
+    default_whisper_model_info, get_whisper_model_info, TranscriptionResult, TranscriptionSegment,
+    WhisperConfig, WhisperError, WhisperModelInfo, WHISPER_MODELS,
 };
 // Audio decoding and transcription require the "whisper" feature
 #[cfg(feature = "whisper")]
-pub use whisper::{WHISPER_SAMPLE_RATE, WhisperTranscriber, decode_audio_file};
+pub use whisper::{decode_audio_file, WhisperTranscriber, WHISPER_SAMPLE_RATE};
 // Structure-aware chunking for preserving tables and code blocks
 pub use structure::{
-    ChunkType, ChunkingOptions, ChunkingResult, StructuralChunker, StructuredChunk,
-    StructuredDocument, TableChunkingStrategy, chunk_structured, detect_structure,
+    chunk_structured, detect_structure, ChunkType, ChunkingOptions, ChunkingResult,
+    StructuralChunker, StructuredChunk, StructuredDocument, TableChunkingStrategy,
 };
 // Adaptive retrieval for dynamic result set sizing
 pub use types::adaptive::{
-    AdaptiveConfig, AdaptiveResult, AdaptiveStats, CutoffStrategy, find_adaptive_cutoff,
-    normalize_scores,
+    find_adaptive_cutoff, normalize_scores, AdaptiveConfig, AdaptiveResult, AdaptiveStats,
+    CutoffStrategy,
 };
 // Replay types for time-travel debugging - always available for serde
 pub use replay::{
-    ActionType, Checkpoint, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION, ReplayAction,
-    ReplayManifest, ReplaySession, SessionSummary, StateSnapshot,
+    ActionType, Checkpoint, ReplayAction, ReplayManifest, ReplaySession, SessionSummary,
+    StateSnapshot, REPLAY_SEGMENT_MAGIC, REPLAY_SEGMENT_VERSION,
 };
 // Full replay functionality requires the "replay" feature
 #[cfg(feature = "replay")]
@@ -337,10 +337,10 @@ use bincode::config::{self, Config};
 use io::header::HeaderCodec;
 
 const TIMELINE_PREVIEW_BYTES: usize = 120;
-const MAX_INDEX_BYTES: u64 = 512 * 1024 * 1024; // Increased from 64MB to 512MB for large datasets
-const MAX_TIME_INDEX_BYTES: u64 = 512 * 1024 * 1024;
-const MAX_FRAME_BYTES: u64 = 256 * 1024 * 1024;
-const DEFAULT_SEARCH_TEXT_LIMIT: usize = 32_768;
+const MAX_INDEX_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB for large datasets
+const MAX_TIME_INDEX_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
+const MAX_FRAME_BYTES: u64 = 1024 * 1024 * 1024; // 1 GiB
+const DEFAULT_SEARCH_TEXT_LIMIT: usize = 131_072; // 128K chars
 
 #[cfg(test)]
 #[allow(clippy::non_std_lazy_statics)]
@@ -943,12 +943,10 @@ mod tests {
                 })
                 .expect("uri search");
             assert_eq!(uri_response.engine, SearchEngineKind::Tantivy);
-            assert!(
-                uri_response
-                    .hits
-                    .iter()
-                    .all(|hit| hit.uri == "mv2://docs/pricing.md")
-            );
+            assert!(uri_response
+                .hits
+                .iter()
+                .all(|hit| hit.uri == "mv2://docs/pricing.md"));
 
             let scope_response = mem
                 .search(SearchRequest {
@@ -968,12 +966,10 @@ mod tests {
                 })
                 .expect("scope search");
             assert_eq!(scope_response.engine, SearchEngineKind::Tantivy);
-            assert!(
-                scope_response
-                    .hits
-                    .iter()
-                    .all(|hit| hit.uri.starts_with("mv2://docs/"))
-            );
+            assert!(scope_response
+                .hits
+                .iter()
+                .all(|hit| hit.uri.starts_with("mv2://docs/")));
         });
     }
 
@@ -1404,6 +1400,17 @@ mod tests {
 
             let err = mem.put_bytes(&[0xFF; 40]).expect_err("capacity exceeded");
             assert!(matches!(err, MemvidError::CapacityExceeded { .. }));
+        });
+    }
+
+    #[test]
+    fn default_create_capacity_matches_free_tier_capacity() {
+        run_serial_test(|| {
+            let dir = tempdir().expect("tmp");
+            let path = dir.path().join("default-capacity.mv2");
+
+            let mem = Memvid::create(&path).expect("create");
+            assert_eq!(mem.get_capacity(), Tier::Free.capacity_bytes());
         });
     }
 }

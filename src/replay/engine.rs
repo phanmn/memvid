@@ -5,9 +5,9 @@
 //! partial replay.
 
 use super::types::{ActionType, ReplaySession};
-use crate::MemvidError;
 use crate::error::Result;
 use crate::memvid::lifecycle::Memvid;
+use crate::MemvidError;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use uuid::Uuid;

@@ -22,15 +22,15 @@ pub const FORMAT_VERSION: u16 = 1;
 /// Embedded WAL begins immediately after the fixed header.
 pub const WAL_OFFSET: u64 = HEADER_SIZE as u64;
 /// Minimal WAL size for empty/small memories (auto-grows on demand).
-pub const WAL_SIZE_TINY: u64 = 64 * 1024;
-/// WAL size tiers based on requested capacity (<100 MB).
-pub const WAL_SIZE_SMALL: u64 = 1024 * 1024;
-/// WAL size for memories under 1 GB.
-pub const WAL_SIZE_MEDIUM: u64 = 4 * 1024 * 1024;
-/// WAL size for memories under 10 GB.
-pub const WAL_SIZE_LARGE: u64 = 16 * 1024 * 1024;
+pub const WAL_SIZE_TINY: u64 = 256 * 1024;
+/// WAL size tiers based on requested capacity (<100 MB).
+pub const WAL_SIZE_SMALL: u64 = 4 * 1024 * 1024;
+/// WAL size for memories under 1 GB.
+pub const WAL_SIZE_MEDIUM: u64 = 16 * 1024 * 1024;
+/// WAL size for memories under 10 GB.
+pub const WAL_SIZE_LARGE: u64 = 64 * 1024 * 1024;
 /// WAL size for larger memories.
-pub const WAL_SIZE_XLARGE: u64 = 64 * 1024 * 1024;
+pub const WAL_SIZE_XLARGE: u64 = 256 * 1024 * 1024;
 /// Trigger checkpoints when the WAL exceeds 75 % occupancy.
 pub const WAL_CHECKPOINT_THRESHOLD: f64 = 0.75;
 /// Additional checkpoint every N transactions (PRD default).

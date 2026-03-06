@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{MemvidError, Result};
-use crate::types::FrameId;
 use crate::types::memory_card::{MemoryCard, MemoryCardId, MemoryKind, Polarity, VersionRelation};
+use crate::types::FrameId;
 
 /// Magic bytes identifying the memories track.
 pub const MEMORIES_TRACK_MAGIC: &[u8; 4] = b"MVMC";
@@ -52,7 +52,7 @@ impl SlotIndex {
     #[must_use]
     pub fn get(&self, entity: &str, slot: &str) -> Option<&[MemoryCardId]> {
         let key = slot_key(entity, slot); // Already lowercased
-        // Try exact match first (new files with lowercase keys)
+                                          // Try exact match first (new files with lowercase keys)
         if let Some(ids) = self.entries.get(&key) {
             return Some(ids.as_slice());
         }
@@ -711,28 +711,22 @@ mod tests {
         let mut track = MemoriesTrack::new();
 
         // Frame 1 is not enriched
-        assert!(
-            track
-                .enrichment_manifest()
-                .needs_enrichment(1, "rules-v1", "1.0.0")
-        );
+        assert!(track
+            .enrichment_manifest()
+            .needs_enrichment(1, "rules-v1", "1.0.0"));
 
         // Enrich frame 1
         track.record_enrichment(1, "rules-v1", "1.0.0", vec![0, 1]);
 
         // Frame 1 is now enriched by rules-v1
-        assert!(
-            !track
-                .enrichment_manifest()
-                .needs_enrichment(1, "rules-v1", "1.0.0")
-        );
+        assert!(!track
+            .enrichment_manifest()
+            .needs_enrichment(1, "rules-v1", "1.0.0"));
 
         // But not by llm
-        assert!(
-            track
-                .enrichment_manifest()
-                .needs_enrichment(1, "llm:phi-3.5-mini", "1.0.0")
-        );
+        assert!(track
+            .enrichment_manifest()
+            .needs_enrichment(1, "llm:phi-3.5-mini", "1.0.0"));
     }
 
     #[test]

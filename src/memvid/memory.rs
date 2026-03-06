@@ -735,8 +735,8 @@ mod tests {
 
     #[test]
     fn test_run_enrichment() {
-        use crate::PutOptions;
         use crate::enrich::RulesEngine;
+        use crate::PutOptions;
 
         let temp = NamedTempFile::new().unwrap();
         let path = temp.path();

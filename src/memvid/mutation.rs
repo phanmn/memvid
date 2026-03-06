@@ -36,14 +36,12 @@ use super::{
     planner::{SegmentChunkPlan, SegmentPlanner},
     workers::SegmentWorkerPool,
 };
-#[cfg(feature = "temporal_track")]
-use crate::TemporalTrackManifest;
 use crate::analysis::auto_tag::AutoTagger;
 use crate::constants::{WAL_SIZE_LARGE, WAL_SIZE_MEDIUM};
 use crate::footer::CommitFooter;
 use crate::io::wal::{EmbeddedWal, WalRecord};
 use crate::memvid::chunks::{plan_document_chunks, plan_text_chunks};
-use crate::memvid::lifecycle::{Memvid, prepare_toc_bytes};
+use crate::memvid::lifecycle::{prepare_toc_bytes, Memvid};
 use crate::reader::{
     DocumentFormat, DocumentReader, PassthroughReader, ReaderDiagnostics, ReaderHint, ReaderOutput,
     ReaderRegistry,
@@ -60,21 +58,23 @@ use crate::types::{
 #[cfg(feature = "parallel_segments")]
 use crate::types::{IndexSegmentRef, SegmentKind, SegmentSpan, SegmentStats};
 #[cfg(feature = "temporal_track")]
+use crate::TemporalTrackManifest;
+use crate::{
+    normalize_text, time_index_append, wal_config, ExtractedDocument, MemvidError, Result,
+    TimeIndexEntry, TimeIndexManifest, VecIndexManifest, DEFAULT_SEARCH_TEXT_LIMIT,
+};
+#[cfg(feature = "temporal_track")]
 use crate::{
     AnchorSource, TemporalAnchor, TemporalContext, TemporalMention, TemporalMentionFlags,
     TemporalMentionKind, TemporalNormalizer, TemporalResolution, TemporalResolutionFlag,
     TemporalResolutionValue,
-};
-use crate::{
-    DEFAULT_SEARCH_TEXT_LIMIT, ExtractedDocument, MemvidError, Result, TimeIndexEntry,
-    TimeIndexManifest, VecIndexManifest, normalize_text, time_index_append, wal_config,
 };
 #[cfg(feature = "temporal_track")]
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 
 const MAGIC_SNIFF_BYTES: usize = 16;
 const WAL_ENTRY_HEADER_SIZE: u64 = 48;
-const WAL_SHIFT_BUFFER_SIZE: usize = 8 * 1024 * 1024;
+const WAL_SHIFT_BUFFER_SIZE: usize = 32 * 1024 * 1024;
 
 #[cfg(feature = "temporal_track")]
 const DEFAULT_TEMPORAL_TZ: &str = "America/Chicago";
@@ -327,9 +327,10 @@ fn extract_via_registry(
     uri: Option<&str>,
 ) -> Result<ExtractedDocument> {
     let registry = default_reader_registry();
-    let magic = bytes
-        .get(..MAGIC_SNIFF_BYTES)
-        .and_then(|slice| if slice.is_empty() { None } else { Some(slice) });
+    let magic =
+        bytes
+            .get(..MAGIC_SNIFF_BYTES)
+            .and_then(|slice| if slice.is_empty() { None } else { Some(slice) });
     let hint = ReaderHint::new(mime_hint, infer_document_format(mime_hint, magic, uri))
         .with_uri(uri)
         .with_magic(magic);
@@ -2856,7 +2857,7 @@ impl Memvid {
     /// Get current storage capacity in bytes.
     ///
     /// Returns the capacity from the applied ticket, or the default
-    /// tier capacity (1 GB for free tier).
+    /// tier capacity for the current tier.
     #[must_use]
     pub fn get_capacity(&self) -> u64 {
         self.capacity_limit()

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::lex::{LexIndex, LexIndexArtifact, LexIndexBuilder};
 use crate::memvid::lifecycle::Memvid;

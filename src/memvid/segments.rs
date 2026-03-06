@@ -12,12 +12,12 @@ use crate::types::{
 };
 use crate::vec::{VecIndexArtifact, VecIndexBuilder};
 use crate::vec_pq::{QuantizedVecIndexArtifact, QuantizedVecIndexBuilder};
-use crate::{MemvidError, Result, TimeIndexEntry, time_index_append};
 #[cfg(feature = "temporal_track")]
 use crate::{
-    TEMPORAL_TRACK_FLAG_HAS_ANCHORS, TEMPORAL_TRACK_FLAG_HAS_MENTIONS, TemporalAnchor,
-    TemporalMention, temporal_track_append,
+    temporal_track_append, TemporalAnchor, TemporalMention, TEMPORAL_TRACK_FLAG_HAS_ANCHORS,
+    TEMPORAL_TRACK_FLAG_HAS_MENTIONS,
 };
+use crate::{time_index_append, MemvidError, Result, TimeIndexEntry};
 use std::io::Cursor;
 
 use super::lifecycle::Memvid;

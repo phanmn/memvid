@@ -12,7 +12,7 @@
 
 use crate::{
     normalize_text,
-    structure::{ChunkingOptions, StructuralChunker, detect_structure},
+    structure::{detect_structure, ChunkingOptions, StructuralChunker},
     types::{TextChunkManifest, TextChunkRange},
 };
 

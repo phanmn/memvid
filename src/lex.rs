@@ -6,7 +6,7 @@ use std::{
 use blake3::hash;
 use serde::{Deserialize, Serialize};
 
-use crate::{MemvidError, Result, types::FrameId};
+use crate::{types::FrameId, MemvidError, Result};
 
 // Bincode configuration reused for deterministic layout.
 fn lex_config() -> impl bincode::config::Config {
@@ -726,7 +726,8 @@ mod tests {
             Major tech companies invest heavily in quantum research and development. \
             Quantum error correction remains a significant challenge for practical quantum computers.";
 
-        let section2 = "Applications of quantum computing span many domains including cryptography, \
+        let section2 =
+            "Applications of quantum computing span many domains including cryptography, \
             drug discovery, and optimization problems. Quantum cryptography promises unbreakable \
             encryption through quantum key distribution protocols. In the pharmaceutical industry, \
             quantum simulations could revolutionize how we discover new medicines. Quantum \

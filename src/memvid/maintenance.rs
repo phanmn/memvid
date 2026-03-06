@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::Result;
 use crate::io::time_index::read_track as time_index_read;
 use crate::memvid::lifecycle::Memvid;
 use crate::types::{
     DoctorOptions, DoctorPlan, DoctorReport, VerificationCheck, VerificationReport,
     VerificationStatus,
 };
+use crate::Result;
 
 impl Memvid {
     pub fn verify<P: AsRef<Path>>(path: P, deep: bool) -> Result<VerificationReport> {

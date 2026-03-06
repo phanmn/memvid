@@ -17,10 +17,10 @@ pub const LOGIC_MESH_MAGIC: &[u8; 4] = b"MVLM";
 pub const LOGIC_MESH_VERSION: u16 = 1;
 
 /// Maximum nodes allowed (`DoS` prevention).
-pub const MAX_MESH_NODES: usize = 1_000_000;
+pub const MAX_MESH_NODES: usize = 10_000_000;
 
 /// Maximum edges allowed (`DoS` prevention).
-pub const MAX_MESH_EDGES: usize = 5_000_000;
+pub const MAX_MESH_EDGES: usize = 50_000_000;
 
 /// A node in the logic mesh representing an entity.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

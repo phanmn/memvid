@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use super::layout::{PageLayout, TextBox, cluster_values, extract_pdf_layout};
+use super::layout::{cluster_values, extract_pdf_layout, PageLayout, TextBox};
 use super::types::{
     DetectionMode, ExtractedTable, ExtractionMode, TableCell, TableExtractionOptions,
     TableExtractionResult, TableQuality, TableRow,

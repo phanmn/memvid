@@ -1,8 +1,8 @@
-use tantivy::Index;
-use tantivy::schema::{IndexRecordOption, NumericOptions, STRING, Schema, TEXT, TextFieldIndexing};
+use tantivy::schema::{IndexRecordOption, NumericOptions, Schema, TextFieldIndexing, STRING, TEXT};
 use tantivy::tokenizer::{
     Language, LowerCaser, RawTokenizer, SimpleTokenizer, Stemmer, TextAnalyzer,
 };
+use tantivy::Index;
 
 pub(super) fn initialise_tokenizer(index: &Index) {
     let analyzer = TextAnalyzer::builder(SimpleTokenizer::default())

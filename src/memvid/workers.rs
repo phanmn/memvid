@@ -5,14 +5,14 @@ use std::{
     collections::HashMap,
     io::Cursor,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     thread,
     time::Instant,
 };
 
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use tracing::debug;
 
 use super::{
@@ -21,8 +21,9 @@ use super::{
     segments::{LexSegmentArtifact, TimeSegmentArtifact, VecSegmentArtifact},
 };
 use crate::{
-    MemvidError, Result, TimeIndexEntry, time_index_append,
+    time_index_append,
     types::{SegmentSpan, SegmentStats},
+    MemvidError, Result, TimeIndexEntry,
 };
 
 /// Minimum number of vectors required to use Product Quantization.

@@ -54,12 +54,12 @@ mod storage;
 mod types;
 
 // Re-export public types
-pub use layout::{LineSegment, PageLayout, TextBox, cluster_values, extract_pdf_layout};
+pub use layout::{cluster_values, extract_pdf_layout, LineSegment, PageLayout, TextBox};
 pub use multi_page::{find_continuation_candidates, merge_multi_page_tables};
 pub use pdf_extractor::extract_tables_from_pdf;
 pub use storage::{
-    TABLE_META_KIND, TABLE_ROW_KIND, TABLE_TRACK, export_to_csv, export_to_json, get_table,
-    list_tables, store_table, store_table_with_embedder,
+    export_to_csv, export_to_json, get_table, list_tables, store_table, store_table_with_embedder,
+    TABLE_META_KIND, TABLE_ROW_KIND, TABLE_TRACK,
 };
 pub use types::{
     DetectionMode, ExtractedTable, ExtractionMode, TableCell, TableExtractionOptions,

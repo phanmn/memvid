@@ -756,7 +756,11 @@ fn convert_hour(hour: i32, ampm: Option<&str>) -> Option<i32> {
                 return None;
             }
             let converted = if marker == "pm" {
-                if hour == 12 { 12 } else { hour + 12 }
+                if hour == 12 {
+                    12
+                } else {
+                    hour + 12
+                }
             } else if hour == 12 {
                 0
             } else {

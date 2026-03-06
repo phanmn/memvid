@@ -28,7 +28,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::{MemvidError, Result, types::FrameId};
+use crate::{types::FrameId, MemvidError, Result};
 
 // ============================================================================
 // Stderr Suppression for macOS
@@ -586,9 +586,9 @@ impl From<ClipError> for MemvidError {
 #[cfg(feature = "clip")]
 mod model {
     use super::*;
-    use image::{DynamicImage, GenericImageView, imageops::FilterType};
+    use image::{imageops::FilterType, DynamicImage, GenericImageView};
     use ndarray::{Array, Array4};
-    use ort::session::{Session, builder::GraphOptimizationLevel};
+    use ort::session::{builder::GraphOptimizationLevel, Session};
     use ort::value::Tensor;
     use std::sync::Mutex;
     use std::time::Instant;

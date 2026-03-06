@@ -10,7 +10,7 @@
 use crate::types::structure::{ChunkingResult, StructuredChunk};
 
 use super::xlsx_ooxml::{
-    NumFmtKind, OoxmlMetadata, excel_serial_to_iso, format_currency, format_percentage,
+    excel_serial_to_iso, format_currency, format_percentage, NumFmtKind, OoxmlMetadata,
 };
 use super::xlsx_table_detect::{CellValue, DetectedTable, SheetGrid};
 
@@ -18,7 +18,7 @@ use super::xlsx_table_detect::{CellValue, DetectedTable, SheetGrid};
 const DEFAULT_MAX_CHUNK_CHARS: usize = 1200;
 
 /// Maximum number of chunks to produce from a single workbook.
-const MAX_SPREADSHEET_CHUNKS: usize = 500;
+const MAX_SPREADSHEET_CHUNKS: usize = 2000;
 
 /// Options for XLSX semantic chunking.
 #[derive(Debug, Clone)]

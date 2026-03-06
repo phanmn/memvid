@@ -15,7 +15,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::constants::{MAGIC, SPEC_VERSION, WAL_OFFSET, WAL_SIZE_TINY};
 use crate::error::{MemvidError, Result};
-use crate::footer::{FooterSlice, find_last_valid_footer};
+use crate::footer::{find_last_valid_footer, FooterSlice};
 use crate::io::header::HeaderCodec;
 #[cfg(feature = "parallel_segments")]
 use crate::io::manifest_wal::ManifestWal;
@@ -31,9 +31,9 @@ use crate::types::{
     FrameStatus, Header, IndexManifests, LogicMesh, MemoriesTrack, PutManyOpts, SchemaRegistry,
     SegmentCatalog, SketchTrack, TicketRef, Tier, Toc, VectorCompression,
 };
-#[cfg(feature = "temporal_track")]
-use crate::{TemporalTrack, temporal_track_read};
 use crate::{lex::LexIndex, vec::VecIndex};
+#[cfg(feature = "temporal_track")]
+use crate::{temporal_track_read, TemporalTrack};
 use blake3::Hasher;
 use memmap2::Mmap;
 
@@ -867,7 +867,7 @@ impl Memvid {
 
     /// Unbind this file from its dashboard memory.
     ///
-    /// This clears the binding and reverts to free tier capacity (1 GB).
+    /// This clears the binding and reverts to the free tier default capacity.
     pub fn unbind_memory(&mut self) -> Result<()> {
         self.toc.memory_binding = None;
         // Revert to free tier
@@ -940,8 +940,8 @@ pub(crate) fn read_toc(file: &mut File, header: &Header) -> Result<Toc> {
 }
 
 fn verify_toc_prefix(bytes: &[u8]) -> Result<()> {
-    const MAX_SEGMENTS: u64 = 1_000_000;
-    const MAX_FRAMES: u64 = 1_000_000;
+    const MAX_SEGMENTS: u64 = 10_000_000;
+    const MAX_FRAMES: u64 = 10_000_000;
     const MIN_SEGMENT_META_BYTES: u64 = 32;
     const MIN_FRAME_BYTES: u64 = 64;
     // TOC trailer layout (little-endian):
@@ -1118,7 +1118,7 @@ fn scan_range_for_toc(data: &[u8], start: usize, end: usize) -> Option<(Toc, u64
     if start >= end || end > data.len() {
         return None;
     }
-    const MAX_TOC_BYTES: usize = 64 * 1024 * 1024;
+    const MAX_TOC_BYTES: usize = 256 * 1024 * 1024;
     const ZERO_CHECKSUM: [u8; 32] = [0u8; 32];
 
     // We only ever consider offsets where the candidate TOC slice would be <= MAX_TOC_BYTES,
@@ -1335,7 +1335,7 @@ struct TailSnapshot {
 }
 
 fn locate_footer_window(mmap: &[u8]) -> Option<(FooterSlice<'_>, usize)> {
-    const MAX_SEARCH_SIZE: usize = 16 * 1024 * 1024;
+    const MAX_SEARCH_SIZE: usize = 64 * 1024 * 1024;
     if mmap.is_empty() {
         return None;
     }

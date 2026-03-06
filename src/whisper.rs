@@ -474,8 +474,8 @@ mod inference {
     use super::*;
     use candle_core::{DType, Device, IndexOp, Tensor};
     use candle_nn::VarBuilder;
-    use candle_transformers::models::whisper::{self as m, Config, audio};
-    use hf_hub::{Repo, RepoType, api::sync::Api};
+    use candle_transformers::models::whisper::{self as m, audio, Config};
+    use hf_hub::{api::sync::Api, Repo, RepoType};
     use tokenizers::Tokenizer;
 
     /// Whisper model wrapper for transcription

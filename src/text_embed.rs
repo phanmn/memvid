@@ -26,7 +26,7 @@
 use crate::types::embedding::EmbeddingProvider;
 use crate::{MemvidError, Result};
 use ndarray::Array;
-use ort::session::{Session, builder::GraphOptimizationLevel};
+use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, VecDeque};
@@ -50,7 +50,7 @@ use tokenizers::{
 mod stderr_suppress {
     use std::fs::File;
     use std::io;
-    use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+    use std::os::unix::io::{AsRawFd, RawFd};
 
     pub struct StderrSuppressor {
         original_stderr: RawFd,
@@ -190,8 +190,10 @@ pub static TEXT_EMBED_MODELS: &[TextEmbedModelInfo] = &[
     // Nomic: Versatile, good for various tasks (768d)
     TextEmbedModelInfo {
         name: "nomic-embed-text-v1.5",
-        model_url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx",
-        tokenizer_url: "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json",
+        model_url:
+            "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/onnx/model.onnx",
+        tokenizer_url:
+            "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main/tokenizer.json",
         dims: 768,
         max_tokens: 512,
         is_default: false,

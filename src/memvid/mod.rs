@@ -30,8 +30,8 @@ pub mod workers;
 #[cfg(feature = "parallel_segments")]
 pub use builder::{BuildOpts, ParallelInput, ParallelPayload};
 pub use enrichment::{
-    EnrichmentHandle, EnrichmentStats, start_enrichment_worker,
-    start_enrichment_worker_with_embeddings,
+    start_enrichment_worker, start_enrichment_worker_with_embeddings, EnrichmentHandle,
+    EnrichmentStats,
 };
 pub use frame::BlobReader;
 pub use lifecycle::{LockSettings, Memvid, OpenReadOptions};

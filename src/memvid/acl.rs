@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::memvid::lifecycle::Memvid;
 use crate::types::{
-    ACL_READ_GROUPS_KEY, ACL_READ_PRINCIPALS_KEY, ACL_READ_ROLES_KEY, ACL_TENANT_ID_KEY,
-    ACL_VISIBILITY_KEY, AclContext, AclEnforcementMode, SearchHit,
+    AclContext, AclEnforcementMode, SearchHit, ACL_READ_GROUPS_KEY, ACL_READ_PRINCIPALS_KEY,
+    ACL_READ_ROLES_KEY, ACL_TENANT_ID_KEY, ACL_VISIBILITY_KEY,
 };
 use crate::{MemvidError, Result};
 

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::{Memvid, PutOptions, SearchRequest, run_serial_test};
+    use crate::{run_serial_test, Memvid, PutOptions, SearchRequest};
     use std::sync::Mutex;
     use tempfile::NamedTempFile;
 
