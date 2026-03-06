@@ -196,6 +196,12 @@ pub fn append_track<W: Write + Seek>(
     anchors: &mut [TemporalAnchor],
     flags: u32,
 ) -> Result<(u64, u64, [u8; 32])> {
+    if flags > u16::MAX as u32 {
+        return Err(MemvidError::InvalidTemporalTrack {
+            reason: "flags value exceeds u16 range".into(),
+        });
+    }
+
     #[cfg(test)]
     println!(
         "append_track: mentions={}, anchors={}, flags={}",
@@ -346,7 +352,13 @@ pub fn calculate_checksum(
     mentions: &[TemporalMention],
     anchors: &[TemporalAnchor],
     flags: u32,
-) -> [u8; 32] {
+) -> Result<[u8; 32]> {
+    if flags > u16::MAX as u32 {
+        return Err(MemvidError::InvalidTemporalTrack {
+            reason: "flags value exceeds u16 range".into(),
+        });
+    }
+
     let mut sorted_mentions = mentions.to_vec();
     sorted_mentions.sort_by(mention_cmp);
     let mut sorted_anchors = anchors.to_vec();
@@ -370,7 +382,7 @@ pub fn calculate_checksum(
         hasher.update(&anchor.encode());
     }
 
-    *hasher.finalize().as_bytes()
+    Ok(*hasher.finalize().as_bytes())
 }
 
 /// Returns mention indices within `[start_utc, end_utc]` (inclusive).
@@ -469,7 +481,8 @@ mod tests {
         assert_eq!(track.anchors.len(), 2);
         assert_eq!(track.flags, 0);
 
-        let expected_checksum = calculate_checksum(&track.mentions, &track.anchors, track.flags);
+        let expected_checksum = calculate_checksum(&track.mentions, &track.anchors, track.flags)
+            .expect("calculate checksum");
         assert_eq!(checksum, expected_checksum);
     }
 
@@ -550,6 +563,23 @@ mod tests {
         ];
         assert!(matches!(
             validate_anchors_sorted(&anchors),
+            Err(MemvidError::InvalidTemporalTrack { .. })
+        ));
+    }
+
+    #[test]
+    fn reject_flags_out_of_range() {
+        let flags = u16::MAX as u32 + 1;
+        let mut mentions = Vec::new();
+        let mut anchors = Vec::new();
+        let mut file = tempfile::tempfile().expect("temp");
+
+        assert!(matches!(
+            append_track(&mut file, &mut mentions, &mut anchors, flags),
+            Err(MemvidError::InvalidTemporalTrack { .. })
+        ));
+        assert!(matches!(
+            calculate_checksum(&mentions, &anchors, flags),
             Err(MemvidError::InvalidTemporalTrack { .. })
         ));
     }

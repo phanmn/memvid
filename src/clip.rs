@@ -957,6 +957,13 @@ mod model {
 
             // Get the embedding from the raw data
             let embedding: Vec<f32> = data.to_vec();
+            let expected_dim = self.model_info.dims as usize;
+            if embedding.len() != expected_dim {
+                return Err(MemvidError::DimensionMismatch {
+                    expected: expected_dim,
+                    got: embedding.len(),
+                });
+            }
             if embedding.iter().any(|v| !v.is_finite()) {
                 return Err(ClipError::InferenceError {
                     cause: "Vision embedding contains non-finite values".to_string(),
@@ -1109,6 +1116,13 @@ mod model {
 
             // Flatten and normalize the embedding
             let embedding: Vec<f32> = data.to_vec();
+            let expected_dim = self.model_info.dims as usize;
+            if embedding.len() != expected_dim {
+                return Err(MemvidError::DimensionMismatch {
+                    expected: expected_dim,
+                    got: embedding.len(),
+                });
+            }
             if embedding.iter().any(|v| !v.is_finite()) {
                 return Err(ClipError::InferenceError {
                     cause: "Text embedding contains non-finite values".to_string(),

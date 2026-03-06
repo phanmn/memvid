@@ -28,9 +28,7 @@ use crate::{MemvidError, Result};
 use ndarray::Array;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, VecDeque};
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -599,11 +597,11 @@ impl LocalTextEmbedder {
         Ok(())
     }
 
-    /// Compute cache key for a given text
-    fn cache_key(text: &str) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        hasher.finish()
+    /// Compute cache key for a given text, including model name to avoid collisions.
+    fn cache_key(&self, text: &str) -> u64 {
+        let hash = blake3::hash(format!("{}:{}", self.model_info.name, text).as_bytes());
+        let bytes = hash.as_bytes();
+        u64::from_le_bytes(bytes[..8].try_into().unwrap())
     }
 
     /// Encode text to embedding (with caching support)
@@ -611,7 +609,7 @@ impl LocalTextEmbedder {
         // 1. Check cache first
         if let Ok(mut cache_guard) = self.cache.lock() {
             if let Some(ref mut cache) = *cache_guard {
-                let key = Self::cache_key(text);
+                let key = self.cache_key(text);
                 if let Some(embedding) = cache.get(key) {
                     tracing::debug!(text_len = text.len(), "Cache hit");
                     return Ok(embedding);
@@ -795,7 +793,7 @@ impl LocalTextEmbedder {
         // 3. Store in cache
         if let Ok(mut cache_guard) = self.cache.lock() {
             if let Some(ref mut cache) = *cache_guard {
-                let key = Self::cache_key(text);
+                let key = self.cache_key(text);
                 cache.insert(key, normalized.clone());
             }
         }
@@ -1139,14 +1137,27 @@ mod tests {
 
     #[test]
     fn test_cache_key_consistency() {
+        let embedder = LocalTextEmbedder::new(TextEmbedConfig::default()).unwrap();
+
         // Same text should produce same key
-        let key1 = LocalTextEmbedder::cache_key("hello world");
-        let key2 = LocalTextEmbedder::cache_key("hello world");
+        let key1 = embedder.cache_key("hello world");
+        let key2 = embedder.cache_key("hello world");
         assert_eq!(key1, key2);
 
         // Different text should (very likely) produce different key
-        let key3 = LocalTextEmbedder::cache_key("goodbye world");
+        let key3 = embedder.cache_key("goodbye world");
         assert_ne!(key1, key3);
+    }
+
+    #[test]
+    fn test_cache_key_differs_across_models() {
+        let bge_small = LocalTextEmbedder::new(TextEmbedConfig::bge_small()).unwrap();
+        let bge_base = LocalTextEmbedder::new(TextEmbedConfig::bge_base()).unwrap();
+
+        // Same text under different models must not share a cache key
+        let key_small = bge_small.cache_key("hello world");
+        let key_base = bge_base.cache_key("hello world");
+        assert_ne!(key_small, key_base);
     }
 
     #[test]

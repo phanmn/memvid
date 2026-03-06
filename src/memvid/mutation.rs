@@ -17,7 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bincode::serde::{decode_from_slice, encode_to_vec};
 use blake3::hash;
-use log::info;
+use tracing::info;
 #[cfg(feature = "temporal_track")]
 use once_cell::sync::OnceCell;
 #[cfg(feature = "temporal_track")]
@@ -75,6 +75,98 @@ use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 const MAGIC_SNIFF_BYTES: usize = 16;
 const WAL_ENTRY_HEADER_SIZE: u64 = 48;
 const WAL_SHIFT_BUFFER_SIZE: usize = 32 * 1024 * 1024;
+
+/// Captures all mutable state before staging operations for atomic rollback.
+///
+/// The `restore` method uses exhaustive struct destructuring so that adding a new
+/// field to `MemvidSnapshot` without updating the restore logic causes a compile error.
+/// NOTE: This does NOT automatically detect new fields added to `Memvid` — when adding
+/// a mutable field to `Memvid`, you must manually add it here and in `capture`/`restore`.
+struct MemvidSnapshot {
+    memories_track: crate::types::MemoriesTrack,
+    logic_mesh: crate::types::LogicMesh,
+    sketch_track: crate::types::SketchTrack,
+    clip_enabled: bool,
+    clip_index: Option<crate::clip::ClipIndex>,
+    vec_enabled: bool,
+    vec_index: Option<crate::vec::VecIndex>,
+    vec_model: Option<String>,
+    vec_compression: crate::types::VectorCompression,
+    dirty: bool,
+    pending_frame_inserts: u64,
+    cached_payload_end: u64,
+    lex_enabled: bool,
+    lex_index: Option<crate::lex::LexIndex>,
+    #[cfg(feature = "lex")]
+    tantivy_dirty: bool,
+}
+
+impl MemvidSnapshot {
+    /// Capture a snapshot of all mutable fields from a `Memvid` instance.
+    fn capture(m: &Memvid) -> Self {
+        Self {
+            memories_track: m.memories_track.clone(),
+            logic_mesh: m.logic_mesh.clone(),
+            sketch_track: m.sketch_track.clone(),
+            clip_enabled: m.clip_enabled,
+            clip_index: m.clip_index.clone(),
+            vec_enabled: m.vec_enabled,
+            vec_index: m.vec_index.clone(),
+            vec_model: m.vec_model.clone(),
+            vec_compression: m.vec_compression.clone(),
+            dirty: m.dirty,
+            pending_frame_inserts: m.pending_frame_inserts,
+            cached_payload_end: m.cached_payload_end,
+            lex_enabled: m.lex_enabled,
+            lex_index: m.lex_index.clone(),
+            #[cfg(feature = "lex")]
+            tantivy_dirty: m.tantivy_dirty,
+        }
+    }
+
+    /// Restore all captured mutable fields back to the `Memvid` instance.
+    ///
+    /// Uses exhaustive destructuring to ensure compile-time safety when new fields are added.
+    fn restore(self, m: &mut Memvid) {
+        let Self {
+            memories_track,
+            logic_mesh,
+            sketch_track,
+            clip_enabled,
+            clip_index,
+            vec_enabled,
+            vec_index,
+            vec_model,
+            vec_compression,
+            dirty,
+            pending_frame_inserts,
+            cached_payload_end,
+            lex_enabled,
+            lex_index,
+            #[cfg(feature = "lex")]
+            tantivy_dirty,
+        } = self;
+
+        m.memories_track = memories_track;
+        m.logic_mesh = logic_mesh;
+        m.sketch_track = sketch_track;
+        m.clip_enabled = clip_enabled;
+        m.clip_index = clip_index;
+        m.vec_enabled = vec_enabled;
+        m.vec_index = vec_index;
+        m.vec_model = vec_model;
+        m.vec_compression = vec_compression;
+        m.dirty = dirty;
+        m.pending_frame_inserts = pending_frame_inserts;
+        m.cached_payload_end = cached_payload_end;
+        m.lex_enabled = lex_enabled;
+        m.lex_index = lex_index;
+        #[cfg(feature = "lex")]
+        {
+            m.tantivy_dirty = tantivy_dirty;
+        }
+    }
+}
 
 #[cfg(feature = "temporal_track")]
 const DEFAULT_TEMPORAL_TZ: &str = "America/Chicago";
@@ -429,10 +521,7 @@ impl Memvid {
         let original_toc = self.toc.clone();
         let original_data_end = self.data_end;
         let original_generation = self.generation;
-        let original_dirty = self.dirty;
-        let original_lex_enabled = self.lex_enabled;
-        #[cfg(feature = "lex")]
-        let original_tantivy_dirty = self.tantivy_dirty;
+        let snapshot = MemvidSnapshot::capture(self);
 
         let destination_path = self.path().to_path_buf();
         let mut original_file = Some(original_file);
@@ -463,12 +552,7 @@ impl Memvid {
                         self.toc = original_toc;
                         self.data_end = original_data_end;
                         self.generation = original_generation;
-                        self.dirty = original_dirty;
-                        self.lex_enabled = original_lex_enabled;
-                        #[cfg(feature = "lex")]
-                        {
-                            self.tantivy_dirty = original_tantivy_dirty;
-                        }
+                        snapshot.restore(self);
                         Err(commit_err)
                     }
                 }
@@ -485,12 +569,7 @@ impl Memvid {
                 self.toc = original_toc;
                 self.data_end = original_data_end;
                 self.generation = original_generation;
-                self.dirty = original_dirty;
-                self.lex_enabled = original_lex_enabled;
-                #[cfg(feature = "lex")]
-                {
-                    self.tantivy_dirty = original_tantivy_dirty;
-                }
+                snapshot.restore(self);
                 Err(err)
             }
         }
@@ -1563,6 +1642,17 @@ impl Memvid {
         Ok(delta)
     }
 
+    /// Clamp a `whole_minutes()` UTC offset to i16 range, warning on overflow.
+    #[cfg(feature = "temporal_track")]
+    fn clamp_tz_minutes(raw: i32) -> i16 {
+        if raw < i32::from(i16::MIN) || raw > i32::from(i16::MAX) {
+            tracing::warn!(raw, "UTC offset out of i16 range, clamping");
+            raw.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16
+        } else {
+            raw as i16
+        }
+    }
+
     #[cfg(feature = "temporal_track")]
     fn determine_temporal_anchor(&self, timestamp: i64) -> (i64, AnchorSource) {
         (timestamp, AnchorSource::FrameTimestamp)
@@ -1649,8 +1739,19 @@ impl Memvid {
         byte_start: usize,
         byte_end: usize,
     ) -> Vec<TemporalMention> {
-        let byte_len = byte_end.saturating_sub(byte_start) as u32;
-        let byte_start = byte_start.min(u32::MAX as usize) as u32;
+        let byte_len_usize = byte_end.saturating_sub(byte_start);
+        let byte_len = if byte_len_usize > u32::MAX as usize {
+            tracing::warn!(value = byte_len_usize, "byte length overflow, clamping to u32::MAX");
+            u32::MAX
+        } else {
+            byte_len_usize as u32
+        };
+        let byte_start = if byte_start > u32::MAX as usize {
+            tracing::warn!(value = byte_start, "byte offset overflow, clamping to u32::MAX");
+            u32::MAX
+        } else {
+            byte_start as u32
+        };
         let mut results = Vec::new();
 
         let base_flags = Self::flags_from_resolution(&resolution.flags);
@@ -1670,7 +1771,7 @@ impl Memvid {
             }
             TemporalResolutionValue::DateTime(dt) => {
                 let ts = dt.unix_timestamp();
-                let tz_hint = dt.offset().whole_minutes() as i16;
+                let tz_hint = Self::clamp_tz_minutes(dt.offset().whole_minutes());
                 results.push(TemporalMention::new(
                     ts,
                     frame_id,
@@ -1716,7 +1817,7 @@ impl Memvid {
                     byte_len,
                     TemporalMentionKind::RangeStart,
                     resolution.confidence,
-                    start.offset().whole_minutes() as i16,
+                    Self::clamp_tz_minutes(start.offset().whole_minutes()),
                     flags,
                 ));
                 results.push(TemporalMention::new(
@@ -1726,7 +1827,7 @@ impl Memvid {
                     byte_len,
                     TemporalMentionKind::RangeEnd,
                     resolution.confidence,
-                    end.offset().whole_minutes() as i16,
+                    Self::clamp_tz_minutes(end.offset().whole_minutes()),
                     flags,
                 ));
             }
@@ -1820,229 +1921,6 @@ impl Memvid {
             }
         }
         Some(date)
-    }
-
-    #[allow(dead_code)]
-    fn publish_lex_delta(&mut self, delta: &IngestionDelta) -> Result<bool> {
-        if delta.inserted_frames.is_empty() || !self.lex_enabled {
-            return Ok(false);
-        }
-
-        let artifact = match self.build_lex_segment_from_frames(&delta.inserted_frames)? {
-            Some(artifact) => artifact,
-            None => return Ok(false),
-        };
-
-        let segment_id = self.toc.segment_catalog.next_segment_id;
-        #[cfg(feature = "parallel_segments")]
-        let span =
-            self.segment_span_from_iter(delta.inserted_frames.iter().map(|frame_id| *frame_id));
-
-        #[cfg_attr(not(feature = "parallel_segments"), allow(unused_mut))]
-        let mut descriptor = self.append_lex_segment(&artifact, segment_id)?;
-        #[cfg(feature = "parallel_segments")]
-        if let Some(span) = span {
-            Self::decorate_segment_common(&mut descriptor.common, span);
-        }
-        #[cfg(feature = "parallel_segments")]
-        let descriptor_for_manifest = descriptor.clone();
-        self.toc.segment_catalog.lex_segments.push(descriptor);
-        #[cfg(feature = "parallel_segments")]
-        if let Err(err) = self.record_index_segment(
-            SegmentKind::Lexical,
-            descriptor_for_manifest.common,
-            SegmentStats {
-                doc_count: artifact.doc_count,
-                vector_count: 0,
-                time_entries: 0,
-                bytes_uncompressed: artifact.bytes.len() as u64,
-                build_micros: 0,
-            },
-        ) {
-            tracing::warn!(error = %err, "manifest WAL append failed for lex segment");
-        }
-        self.toc.segment_catalog.version = self.toc.segment_catalog.version.max(1);
-        self.toc.segment_catalog.next_segment_id = segment_id.saturating_add(1);
-        Ok(true)
-    }
-
-    #[allow(dead_code)]
-    fn publish_vec_delta(&mut self, delta: &IngestionDelta) -> Result<bool> {
-        if delta.inserted_embeddings.is_empty() || !self.vec_enabled {
-            return Ok(false);
-        }
-
-        let artifact = match self.build_vec_segment_from_embeddings(&delta.inserted_embeddings)? {
-            Some(artifact) => artifact,
-            None => return Ok(false),
-        };
-
-        if let Some(existing_dim) = self.effective_vec_index_dimension()? {
-            if existing_dim != artifact.dimension {
-                return Err(MemvidError::VecDimensionMismatch {
-                    expected: existing_dim,
-                    actual: artifact.dimension as usize,
-                });
-            }
-        }
-
-        let segment_id = self.toc.segment_catalog.next_segment_id;
-        #[cfg(feature = "parallel_segments")]
-        #[cfg(feature = "parallel_segments")]
-        let span = self.segment_span_from_iter(delta.inserted_embeddings.iter().map(|(id, _)| *id));
-
-        #[cfg_attr(not(feature = "parallel_segments"), allow(unused_mut))]
-        let mut descriptor = self.append_vec_segment(&artifact, segment_id)?;
-        #[cfg(feature = "parallel_segments")]
-        if let Some(span) = span {
-            Self::decorate_segment_common(&mut descriptor.common, span);
-        }
-        #[cfg(feature = "parallel_segments")]
-        let descriptor_for_manifest = descriptor.clone();
-        self.toc.segment_catalog.vec_segments.push(descriptor);
-        #[cfg(feature = "parallel_segments")]
-        if let Err(err) = self.record_index_segment(
-            SegmentKind::Vector,
-            descriptor_for_manifest.common,
-            SegmentStats {
-                doc_count: 0,
-                vector_count: artifact.vector_count,
-                time_entries: 0,
-                bytes_uncompressed: artifact.bytes_uncompressed,
-                build_micros: 0,
-            },
-        ) {
-            tracing::warn!(error = %err, "manifest WAL append failed for vec segment");
-        }
-        self.toc.segment_catalog.version = self.toc.segment_catalog.version.max(1);
-        self.toc.segment_catalog.next_segment_id = segment_id.saturating_add(1);
-
-        // Keep the global vec manifest in sync for auto-detection and stats.
-        if self.toc.indexes.vec.is_none() {
-            let empty_offset = self.data_end;
-            let empty_checksum = *b"\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\x9a\xfb\xf4\xc8\x99\x6f\xb9\x24\
-                                    \x27\xae\x41\xe4\x64\x9b\x93\x4c\xa4\x95\x99\x1b\x78\x52\xb8\x55";
-            self.toc.indexes.vec = Some(VecIndexManifest {
-                vector_count: 0,
-                dimension: 0,
-                bytes_offset: empty_offset,
-                bytes_length: 0,
-                checksum: empty_checksum,
-                compression_mode: self.vec_compression.clone(),
-                model: self.vec_model.clone(),
-            });
-        }
-        if let Some(manifest) = self.toc.indexes.vec.as_mut() {
-            if manifest.dimension == 0 {
-                manifest.dimension = artifact.dimension;
-            }
-            if manifest.bytes_length == 0 {
-                manifest.vector_count = manifest.vector_count.saturating_add(artifact.vector_count);
-                manifest.compression_mode = artifact.compression.clone();
-            }
-        }
-
-        self.vec_enabled = true;
-        Ok(true)
-    }
-
-    #[allow(dead_code)]
-    fn publish_time_delta(&mut self, delta: &IngestionDelta) -> Result<bool> {
-        if delta.inserted_time_entries.is_empty() {
-            return Ok(false);
-        }
-
-        let artifact = match self.build_time_segment_from_entries(&delta.inserted_time_entries)? {
-            Some(artifact) => artifact,
-            None => return Ok(false),
-        };
-
-        let segment_id = self.toc.segment_catalog.next_segment_id;
-        #[cfg(feature = "parallel_segments")]
-        #[cfg(feature = "parallel_segments")]
-        let span = self.segment_span_from_iter(
-            delta
-                .inserted_time_entries
-                .iter()
-                .map(|entry| entry.frame_id),
-        );
-
-        #[cfg_attr(not(feature = "parallel_segments"), allow(unused_mut))]
-        let mut descriptor = self.append_time_segment(&artifact, segment_id)?;
-        #[cfg(feature = "parallel_segments")]
-        if let Some(span) = span {
-            Self::decorate_segment_common(&mut descriptor.common, span);
-        }
-        #[cfg(feature = "parallel_segments")]
-        let descriptor_for_manifest = descriptor.clone();
-        self.toc.segment_catalog.time_segments.push(descriptor);
-        #[cfg(feature = "parallel_segments")]
-        if let Err(err) = self.record_index_segment(
-            SegmentKind::Time,
-            descriptor_for_manifest.common,
-            SegmentStats {
-                doc_count: 0,
-                vector_count: 0,
-                time_entries: artifact.entry_count,
-                bytes_uncompressed: artifact.bytes.len() as u64,
-                build_micros: 0,
-            },
-        ) {
-            tracing::warn!(error = %err, "manifest WAL append failed for time segment");
-        }
-        self.toc.segment_catalog.version = self.toc.segment_catalog.version.max(1);
-        self.toc.segment_catalog.next_segment_id = segment_id.saturating_add(1);
-        Ok(true)
-    }
-
-    #[cfg(feature = "temporal_track")]
-    #[allow(dead_code)]
-    fn publish_temporal_delta(&mut self, delta: &IngestionDelta) -> Result<bool> {
-        if delta.inserted_temporal_mentions.is_empty() && delta.inserted_temporal_anchors.is_empty()
-        {
-            return Ok(false);
-        }
-
-        debug_assert!(
-            delta.inserted_temporal_mentions.len() < 1_000_000,
-            "temporal delta mentions unexpectedly large: {}",
-            delta.inserted_temporal_mentions.len()
-        );
-        debug_assert!(
-            delta.inserted_temporal_anchors.len() < 1_000_000,
-            "temporal delta anchors unexpectedly large: {}",
-            delta.inserted_temporal_anchors.len()
-        );
-
-        let artifact = match self.build_temporal_segment_from_records(
-            &delta.inserted_temporal_mentions,
-            &delta.inserted_temporal_anchors,
-        )? {
-            Some(artifact) => artifact,
-            None => return Ok(false),
-        };
-
-        let segment_id = self.toc.segment_catalog.next_segment_id;
-        let descriptor = self.append_temporal_segment(&artifact, segment_id)?;
-        self.toc
-            .segment_catalog
-            .temporal_segments
-            .push(descriptor.clone());
-        self.toc.segment_catalog.version = self.toc.segment_catalog.version.max(1);
-        self.toc.segment_catalog.next_segment_id = segment_id.saturating_add(1);
-
-        self.toc.temporal_track = Some(TemporalTrackManifest {
-            bytes_offset: descriptor.common.bytes_offset,
-            bytes_length: descriptor.common.bytes_length,
-            entry_count: artifact.entry_count,
-            anchor_count: artifact.anchor_count,
-            checksum: artifact.checksum,
-            flags: artifact.flags,
-        });
-
-        self.clear_temporal_track_cache();
-
-        Ok(true)
     }
 
     fn mark_frame_superseded(&mut self, frame_id: FrameId, successor_id: FrameId) -> Result<()> {
@@ -3768,20 +3646,6 @@ impl Memvid {
         // Clone search_text for triplet extraction (before it's moved into WAL entry)
         let triplet_text = search_text.clone();
 
-        // Capture values needed for instant indexing BEFORE they're moved into entry
-        #[cfg(feature = "lex")]
-        let instant_index_tags = if options.instant_index {
-            tags.clone()
-        } else {
-            Vec::new()
-        };
-        #[cfg(feature = "lex")]
-        let instant_index_labels = if options.instant_index {
-            labels.clone()
-        } else {
-            Vec::new()
-        };
-
         // Determine enrichment state: Searchable if needs background work, Enriched if complete
         #[cfg(feature = "lex")]
         let needs_enrichment =
@@ -3829,67 +3693,9 @@ impl Memvid {
         let parent_seq = self.append_wal_entry(&parent_bytes)?;
         self.pending_frame_inserts = self.pending_frame_inserts.saturating_add(1);
 
-        // Instant indexing: make frame searchable immediately (<1s) without full commit
-        // This is Phase 1 of progressive ingestion - frame is searchable but not fully enriched
-        #[cfg(feature = "lex")]
-        if options.instant_index && self.tantivy.is_some() {
-            // Create a minimal frame for indexing
-            let frame_id = parent_seq as FrameId;
-
-            // Use triplet_text which was cloned before entry was created
-            if let Some(ref text) = triplet_text {
-                if !text.trim().is_empty() {
-                    // Create temporary frame for indexing (minimal fields for Tantivy)
-                    let temp_frame = Frame {
-                        id: frame_id,
-                        timestamp,
-                        anchor_ts: None,
-                        anchor_source: None,
-                        kind: options.kind.clone(),
-                        track: options.track.clone(),
-                        payload_offset: 0,
-                        payload_length: 0,
-                        checksum: [0u8; 32],
-                        uri: options
-                            .uri
-                            .clone()
-                            .or_else(|| Some(crate::default_uri(frame_id))),
-                        title: options.title.clone(),
-                        canonical_encoding: crate::types::CanonicalEncoding::default(),
-                        canonical_length: None,
-                        metadata: None, // Not needed for text search
-                        search_text: triplet_text.clone(),
-                        tags: instant_index_tags.clone(),
-                        labels: instant_index_labels.clone(),
-                        extra_metadata: std::collections::BTreeMap::new(), // Not needed for search
-                        content_dates: Vec::new(),                         // Not needed for search
-                        chunk_manifest: None,
-                        role: options.role,
-                        parent_id: None,
-                        chunk_index: None,
-                        chunk_count: None,
-                        status: FrameStatus::Active,
-                        supersedes,
-                        superseded_by: None,
-                        source_sha256: None, // Not needed for search
-                        source_path: None,   // Not needed for search
-                        enrichment_state: crate::types::EnrichmentState::Searchable,
-                    };
-
-                    // Get mutable reference to engine and index the frame
-                    if let Some(engine) = self.tantivy.as_mut() {
-                        engine.add_frame(&temp_frame, text)?;
-                        engine.soft_commit()?;
-                        self.tantivy_dirty = true;
-
-                        tracing::debug!(
-                            frame_id = frame_id,
-                            "instant index: frame searchable immediately"
-                        );
-                    }
-                }
-            }
-        }
+        // NOTE: Instant indexing deferred to commit time (FR-005). Pre-commit Tantivy
+        // adds used WAL sequence numbers as frame IDs, which don't match the real IDs
+        // assigned by apply_records(). Indexing now happens correctly at commit time.
 
         // Queue frame for background enrichment when using instant index path
         // Enrichment includes: embedding generation, full text re-extraction if time-limited

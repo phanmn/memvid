@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 
 use super::common::FrameId;
 use crate::{MemvidError, Result};
@@ -547,6 +546,50 @@ impl LogicMesh {
         }
     }
 
+    /// Check if the mesh contains old-format (DefaultHasher) node IDs that need migration.
+    ///
+    /// Samples up to 10 nodes and compares stored IDs against BLAKE3-computed IDs.
+    /// Returns `true` if any mismatch is found, meaning migration is needed.
+    #[must_use]
+    pub fn needs_migration(&self) -> bool {
+        if self.nodes.is_empty() {
+            return false;
+        }
+        let sample_size = self.nodes.len().min(10);
+        for node in &self.nodes[..sample_size] {
+            let expected_id = compute_node_id(&node.canonical_name, node.kind);
+            if node.id != expected_id {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Migrate all node IDs from old-format hashes to BLAKE3.
+    ///
+    /// Rehashes all entities with BLAKE3, updates edge references, and rebuilds adjacency.
+    pub fn migrate_node_ids(&mut self) {
+        let mut id_map: HashMap<u64, u64> = HashMap::new();
+
+        for node in &mut self.nodes {
+            let old_id = node.id;
+            let new_id = compute_node_id(&node.canonical_name, node.kind);
+            node.id = new_id;
+            id_map.insert(old_id, new_id);
+        }
+
+        for edge in &mut self.edges {
+            if let Some(&new_id) = id_map.get(&edge.from_node) {
+                edge.from_node = new_id;
+            }
+            if let Some(&new_id) = id_map.get(&edge.to_node) {
+                edge.to_node = new_id;
+            }
+        }
+
+        self.build_adjacency();
+    }
+
     /// Prepare the mesh for serialization (sort and rebuild adjacency).
     pub fn finalize(&mut self) {
         self.nodes.sort_by_key(|n| n.id);
@@ -561,13 +604,17 @@ impl LogicMesh {
     }
 }
 
-/// Compute deterministic node ID from canonical name and kind.
+/// Compute deterministic node ID from canonical name and kind using BLAKE3.
 #[must_use]
 pub fn compute_node_id(canonical_name: &str, kind: EntityKind) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    canonical_name.hash(&mut hasher);
-    (kind as u8).hash(&mut hasher);
-    hasher.finish()
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(canonical_name.as_bytes());
+    hasher.update(&[kind as u8]);
+    let hash = hasher.finalize();
+    let bytes = hash.as_bytes();
+    u64::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ])
 }
 
 #[cfg(test)]

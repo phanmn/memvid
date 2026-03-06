@@ -166,7 +166,8 @@ pub use io::temporal_index::{
 };
 pub use io::time_index::{
     append_track as time_index_append, calculate_checksum as time_index_checksum,
-    read_track as time_index_read, TimeIndexEntry,
+    read_track as time_index_read, read_track_verified as time_index_read_verified,
+    TimeIndexEntry,
 };
 pub use io::wal::{EmbeddedWal, WalRecord, WalStats};
 pub use lex::{LexIndex, LexIndexArtifact, LexIndexBuilder, LexSearchHit};
@@ -430,7 +431,7 @@ impl Memvid {
             return Ok(());
         }
         if self.dirty || self.tantivy_index_pending() {
-            return Ok(());
+            return Err(MemvidError::DowngradeBlocked);
         }
         self.lock.downgrade_to_shared()?;
         self.read_only = true;

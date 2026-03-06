@@ -135,7 +135,7 @@ impl EmbeddedWal {
             self.write_head = 0;
         }
 
-        let next_sequence = self.sequence + 1;
+        let next_sequence = self.sequence.checked_add(1).ok_or(MemvidError::WalOverflow)?;
         tracing::debug!(
             wal.write_head = self.write_head,
             wal.sequence = next_sequence,
@@ -146,7 +146,7 @@ impl EmbeddedWal {
 
         self.write_head = (self.write_head + entry_size) % self.region_size;
         self.pending_bytes += entry_size;
-        self.sequence = self.sequence.wrapping_add(1);
+        self.sequence = next_sequence;
         self.appends_since_checkpoint = self.appends_since_checkpoint.saturating_add(1);
 
         self.maybe_write_sentinel()?;

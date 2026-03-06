@@ -228,10 +228,9 @@ impl VecIndex {
         }
     }
 
-    #[must_use]
-    pub fn search(&self, query: &[f32], limit: usize) -> Vec<VecSearchHit> {
+    pub fn search(&self, query: &[f32], limit: usize) -> Result<Vec<VecSearchHit>> {
         if query.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
         match self {
             VecIndex::Uncompressed { documents } => {
@@ -251,9 +250,9 @@ impl VecIndex {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 hits.truncate(limit);
-                hits
+                Ok(hits)
             }
-            VecIndex::Compressed(quantized) => quantized.search(query, limit),
+            VecIndex::Compressed(quantized) => Ok(quantized.search(query, limit)),
             #[cfg(any(feature = "vec", feature = "hnsw_bench"))]
             VecIndex::Hnsw(index) => index.search(query, limit),
         }
@@ -322,7 +321,7 @@ pub struct VecSearchHit {
 }
 
 fn l2_distance(a: &[f32], b: &[f32]) -> f32 {
-    crate::simd::l2_distance_simd(a, b)
+    crate::simd::l2_distance_simd(a, b).unwrap_or(f32::INFINITY)
 }
 
 #[cfg(any(feature = "vec", feature = "hnsw_bench"))]
@@ -382,8 +381,7 @@ impl HnswVecIndex {
         })
     }
 
-    #[must_use]
-    pub fn search(&self, query: &[f32], limit: usize) -> Vec<VecSearchHit> {
+    pub fn search(&self, query: &[f32], limit: usize) -> Result<Vec<VecSearchHit>> {
         // Use thread-local searcher and dest buffer to avoid per-query allocations
         thread_local! {
             static SEARCHER: std::cell::RefCell<Searcher<u32>> = std::cell::RefCell::new(Searcher::new());
@@ -421,14 +419,19 @@ impl HnswVecIndex {
                     &mut dest[..required_size],
                 );
 
-                found
-                    .iter()
-                    .take(limit)
-                    .map(|neighbor| VecSearchHit {
-                        frame_id: self.ids[neighbor.index],
+                let mut hits = Vec::with_capacity(limit);
+                for neighbor in found.iter().take(limit) {
+                    let frame_id = *self.ids.get(neighbor.index).ok_or_else(|| {
+                        MemvidError::IndexCorrupted(
+                            "HNSW neighbor index out of bounds".to_string(),
+                        )
+                    })?;
+                    hits.push(VecSearchHit {
+                        frame_id,
                         distance: (neighbor.distance as f32) / HNSW_DISTANCE_SCALE,
-                    })
-                    .collect()
+                    });
+                }
+                Ok(hits)
             })
         })
     }
@@ -448,7 +451,7 @@ mod tests {
         assert_eq!(artifact.dimension, 3);
 
         let index = VecIndex::decode(&artifact.bytes).expect("decode");
-        let hits = index.search(&[0.0, 1.0, 2.0], 10);
+        let hits = index.search(&[0.0, 1.0, 2.0], 10).expect("search");
         assert_eq!(hits[0].frame_id, 1);
     }
 
@@ -531,7 +534,7 @@ mod tests {
 
         // Query with a vector identical to frame_id=500
         let query: Vec<f32> = (0..dim).map(|_| 500.0_f32).collect();
-        let hits = index.search(&query, 5);
+        let hits = index.search(&query, 5).expect("search");
 
         assert!(!hits.is_empty(), "Should find at least one hit");
         assert_eq!(
@@ -567,11 +570,11 @@ mod tests {
 
         // Search before any re-serialization
         let query: Vec<f32> = (0..dim).map(|j| (j % 100) as f32 / 100.0).collect();
-        let hits_1 = index.search(&query, 10);
+        let hits_1 = index.search(&query, 10).expect("search 1");
 
         // Decode again from same bytes (simulates loading from disk)
         let index_2 = VecIndex::decode(&original_bytes).expect("decode again");
-        let hits_2 = index_2.search(&query, 10);
+        let hits_2 = index_2.search(&query, 10).expect("search 2");
 
         // Results should be identical
         assert_eq!(hits_1.len(), hits_2.len());
@@ -623,8 +626,8 @@ mod tests {
         let query = embeddings[750].clone();
         let k = 10;
 
-        let hnsw_hits = hnsw_index.search(&query, k);
-        let brute_hits = brute_index.search(&query, k);
+        let hnsw_hits = hnsw_index.search(&query, k).expect("hnsw search");
+        let brute_hits = brute_index.search(&query, k).expect("brute search");
 
         // HNSW should find the exact match first
         assert_eq!(hnsw_hits[0].frame_id, 750, "HNSW should find exact match");

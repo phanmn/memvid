@@ -3,21 +3,19 @@ use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(feature = "lex")]
 use std::collections::{HashMap, HashSet};
 
-use crate::lex::{LexIndexArtifact, LexIndexBuilder};
 #[cfg(feature = "lex")]
 use crate::types::TantivySegmentDescriptor;
 use crate::types::{
-    FrameId, FrameRole, FrameStatus, LexSegmentDescriptor, SegmentCommon, TimeSegmentDescriptor,
-    VecSegmentDescriptor, VectorCompression,
+    LexSegmentDescriptor, SegmentCommon, TimeSegmentDescriptor, VecSegmentDescriptor,
+    VectorCompression,
 };
-use crate::vec::{VecIndexArtifact, VecIndexBuilder};
-use crate::vec_pq::{QuantizedVecIndexArtifact, QuantizedVecIndexBuilder};
 #[cfg(feature = "temporal_track")]
 use crate::{
     temporal_track_append, TemporalAnchor, TemporalMention, TEMPORAL_TRACK_FLAG_HAS_ANCHORS,
     TEMPORAL_TRACK_FLAG_HAS_MENTIONS,
 };
-use crate::{time_index_append, MemvidError, Result, TimeIndexEntry};
+use crate::{MemvidError, Result};
+#[cfg(feature = "temporal_track")]
 use std::io::Cursor;
 
 use super::lifecycle::Memvid;
@@ -25,12 +23,8 @@ use super::lifecycle::Memvid;
 #[cfg(feature = "lex")]
 use crate::search::{EmbeddedLexSegment, TantivySnapshot};
 
-/// Minimum number of vectors required to use Product Quantization.
-/// Below this threshold, we fall back to uncompressed vectors.
-/// PQ requires training k-means on many vectors to learn good codebooks.
-const MIN_VECTORS_FOR_PQ: usize = 100;
-
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct LexSegmentArtifact {
     pub bytes: Vec<u8>,
     pub doc_count: u64,
@@ -38,6 +32,7 @@ pub(crate) struct LexSegmentArtifact {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct VecSegmentArtifact {
     pub bytes: Vec<u8>,
     pub vector_count: u64,
@@ -49,6 +44,7 @@ pub(crate) struct VecSegmentArtifact {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct TimeSegmentArtifact {
     pub bytes: Vec<u8>,
     pub entry_count: u64,
@@ -94,204 +90,7 @@ pub(crate) struct TantivySnapshotDelta {
 }
 
 impl Memvid {
-    pub(crate) fn build_lex_segment_from_frames(
-        &mut self,
-        frame_ids: &[FrameId],
-    ) -> Result<Option<LexSegmentArtifact>> {
-        if frame_ids.is_empty() || !self.lex_enabled {
-            return Ok(None);
-        }
-
-        let mut builder = LexIndexBuilder::new();
-        let empty_tags = std::collections::HashMap::new();
-        for frame_id in frame_ids {
-            let frame = self
-                .toc
-                .frames
-                .get(usize::try_from(*frame_id).unwrap_or(0))
-                .cloned()
-                .ok_or(MemvidError::InvalidFrame {
-                    frame_id: *frame_id,
-                    reason: "frame id out of range for lex segment",
-                })?;
-
-            if frame.status != FrameStatus::Active {
-                continue;
-            }
-            if frame.role != FrameRole::Document && frame.role != FrameRole::DocumentChunk {
-                continue;
-            }
-
-            // Use search_text if available (covers no_raw mode), otherwise fall back to content
-            let content = if let Some(ref text) = frame.search_text {
-                if text.trim().is_empty() {
-                    self.frame_content(&frame)?
-                } else {
-                    text.clone()
-                }
-            } else {
-                self.frame_content(&frame)?
-            };
-            if content.trim().is_empty() {
-                continue;
-            }
-            let uri = frame
-                .uri
-                .clone()
-                .unwrap_or_else(|| crate::default_uri(frame.id));
-            builder.add_document(
-                frame.id,
-                &uri,
-                frame.title.as_deref(),
-                &content,
-                &empty_tags,
-            );
-        }
-
-        let LexIndexArtifact {
-            bytes,
-            doc_count,
-            checksum,
-        } = builder.finish()?;
-        if doc_count == 0 {
-            return Ok(None);
-        }
-        Ok(Some(LexSegmentArtifact {
-            bytes,
-            doc_count,
-            checksum,
-        }))
-    }
-
-    pub(crate) fn build_vec_segment_from_embeddings(
-        &self,
-        embeddings: &[(FrameId, Vec<f32>)],
-    ) -> Result<Option<VecSegmentArtifact>> {
-        if embeddings.is_empty() || !self.vec_enabled {
-            return Ok(None);
-        }
-
-        // Determine vector dimension and validate all provided embeddings are consistent.
-        let mut dimension: Option<u32> = None;
-        let mut non_empty_count = 0usize;
-        for (_frame_id, vector) in embeddings {
-            if vector.is_empty() {
-                continue;
-            }
-            non_empty_count = non_empty_count.saturating_add(1);
-            let vec_dim = u32::try_from(vector.len()).unwrap_or(0);
-            match dimension {
-                None => dimension = Some(vec_dim),
-                Some(existing) if existing == vec_dim => {}
-                Some(existing) => {
-                    return Err(MemvidError::VecDimensionMismatch {
-                        expected: existing,
-                        actual: vector.len(),
-                    });
-                }
-            }
-        }
-        let Some(dimension) = dimension else {
-            // All embeddings were empty.
-            return Ok(None);
-        };
-
-        // Determine effective compression: use uncompressed if below PQ threshold
-        let effective_compression = match &self.vec_compression {
-            VectorCompression::Pq96 if non_empty_count < MIN_VECTORS_FOR_PQ => {
-                // Fall back to uncompressed for small vector counts
-                VectorCompression::None
-            }
-            other => other.clone(),
-        };
-
-        match effective_compression {
-            VectorCompression::None => {
-                // Uncompressed path - use regular VecIndexBuilder
-                let mut builder = VecIndexBuilder::new();
-                for (frame_id, vector) in embeddings {
-                    if vector.is_empty() {
-                        continue;
-                    }
-                    builder.add_document(*frame_id, vector.clone());
-                }
-
-                let VecIndexArtifact {
-                    bytes,
-                    vector_count,
-                    dimension: artifact_dimension,
-                    checksum,
-                    #[cfg(feature = "parallel_segments")]
-                    bytes_uncompressed,
-                } = builder.finish()?;
-
-                if vector_count == 0 {
-                    return Ok(None);
-                }
-
-                Ok(Some(VecSegmentArtifact {
-                    bytes,
-                    vector_count,
-                    dimension: artifact_dimension.max(dimension),
-                    checksum,
-                    compression: VectorCompression::None,
-                    #[cfg(feature = "parallel_segments")]
-                    bytes_uncompressed,
-                }))
-            }
-            VectorCompression::Pq96 => {
-                // Compressed path - use QuantizedVecIndexBuilder
-                let mut builder = QuantizedVecIndexBuilder::new();
-
-                // Collect all vectors for training
-                let mut training_vectors = Vec::new();
-                for (_frame_id, vector) in embeddings {
-                    if vector.is_empty() {
-                        continue;
-                    }
-                    training_vectors.push(vector.clone());
-                }
-
-                if training_vectors.is_empty() {
-                    return Ok(None);
-                }
-
-                // Train the quantizer on all vectors
-                builder.train_quantizer(&training_vectors, dimension)?;
-
-                // Add all documents
-                for (frame_id, vector) in embeddings {
-                    if vector.is_empty() {
-                        continue;
-                    }
-                    builder.add_document(*frame_id, vector.clone())?;
-                }
-
-                let QuantizedVecIndexArtifact {
-                    bytes,
-                    vector_count,
-                    dimension: artifact_dimension,
-                    checksum,
-                    compression_ratio: _,
-                } = builder.finish()?;
-
-                if vector_count == 0 {
-                    return Ok(None);
-                }
-
-                Ok(Some(VecSegmentArtifact {
-                    bytes,
-                    vector_count,
-                    dimension: artifact_dimension.max(dimension),
-                    checksum,
-                    compression: VectorCompression::Pq96,
-                    #[cfg(feature = "parallel_segments")]
-                    bytes_uncompressed: 0, // PQ doesn't track uncompressed size
-                }))
-            }
-        }
-    }
-
+    #[allow(dead_code)]
     pub(crate) fn append_lex_segment(
         &mut self,
         artifact: &LexSegmentArtifact,
@@ -324,6 +123,7 @@ impl Memvid {
         ))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn append_vec_segment(
         &mut self,
         artifact: &VecSegmentArtifact,
@@ -381,31 +181,6 @@ impl Memvid {
         ))
     }
 
-    pub(crate) fn build_time_segment_from_entries(
-        &self,
-        entries: &[TimeIndexEntry],
-    ) -> Result<Option<TimeSegmentArtifact>> {
-        if entries.is_empty() {
-            return Ok(None);
-        }
-
-        let mut sorted_entries = entries.to_owned();
-        sorted_entries.sort_by_key(|entry| (entry.timestamp, entry.frame_id));
-
-        let mut cursor = Cursor::new(Vec::new());
-        let (_, _length, checksum) = time_index_append(&mut cursor, &mut sorted_entries)?;
-        let bytes = cursor.into_inner();
-        if bytes.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(TimeSegmentArtifact {
-            bytes,
-            entry_count: sorted_entries.len() as u64,
-            checksum,
-        }))
-    }
-
     #[cfg(feature = "temporal_track")]
     pub(crate) fn build_temporal_segment_from_records(
         &self,
@@ -453,6 +228,7 @@ impl Memvid {
         }))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn append_time_segment(
         &mut self,
         artifact: &TimeSegmentArtifact,

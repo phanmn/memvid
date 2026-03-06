@@ -128,6 +128,27 @@ pub fn read_track<R: Read + Seek>(
     Ok(entries)
 }
 
+/// Reads the time index entries and verifies the BLAKE3 checksum matches.
+///
+/// Calls [`read_track`] internally, then computes [`calculate_checksum`] over
+/// the returned entries and compares against `expected_checksum`.  Returns
+/// `Err(MemvidError::ChecksumMismatch)` on mismatch.
+pub fn read_track_verified<R: Read + Seek>(
+    reader: &mut R,
+    offset: u64,
+    length: u64,
+    expected_checksum: [u8; 32],
+) -> Result<Vec<TimeIndexEntry>> {
+    let entries = read_track(reader, offset, length)?;
+    let actual = calculate_checksum(&entries);
+    if actual != expected_checksum {
+        return Err(MemvidError::ChecksumMismatch {
+            context: "time index",
+        });
+    }
+    Ok(entries)
+}
+
 /// Calculates the checksum for the provided entries in canonical order.
 #[must_use]
 pub fn calculate_checksum(entries: &[TimeIndexEntry]) -> [u8; 32] {
@@ -250,5 +271,35 @@ mod tests {
         assert!(read_back.is_empty());
         let expected_checksum = calculate_checksum(&[]);
         assert_eq!(checksum, expected_checksum);
+    }
+
+    #[test]
+    fn read_track_verified_accepts_matching_checksum() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries = vec![TimeIndexEntry::new(10, 1), TimeIndexEntry::new(20, 2)];
+        let (offset, length, checksum) =
+            append_track(&mut file, &mut entries).expect("append");
+
+        let read_back =
+            read_track_verified(&mut file, offset, length, checksum).expect("verified read");
+        assert_eq!(read_back, entries);
+    }
+
+    #[test]
+    fn read_track_verified_rejects_checksum_mismatch() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries = vec![TimeIndexEntry::new(10, 1)];
+        let (offset, length, mut checksum) =
+            append_track(&mut file, &mut entries).expect("append");
+        checksum[0] ^= 0xFF;
+
+        let err = read_track_verified(&mut file, offset, length, checksum)
+            .expect_err("checksum mismatch");
+        match err {
+            MemvidError::ChecksumMismatch { context } => {
+                assert_eq!(context, "time index");
+            }
+            other => panic!("expected ChecksumMismatch, got: {other:?}"),
+        }
     }
 }

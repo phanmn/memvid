@@ -117,3 +117,10 @@ Memvid::verify("file.mv2", deep)?;
 - Crash safety: All writes go through WAL
 - Append-only: Frames are immutable once committed
 - No async: Library is synchronous for simplicity
+
+## Active Technologies
+- Rust 1.90.0 (Edition 2024, MSRV 1.85.0) + blake3 1.5.1, tantivy 0.25, hnsw 0.11, ort 2.0.0-rc.10, tracing 0.1.41, zip 7.1, candle 0.9 (001-code-review-fixes)
+- Single `.mv2` file (custom binary format with WAL, segments, indices) (001-code-review-fixes)
+
+## Recent Changes
+- 001-code-review-fixes: Corrected inaccurate docs, extracted shared helpers to remove duplication, removed dead code, hardened shell scripts, fixed security issues (URL validation, XLSX decompression bounds, encoding deserialization)

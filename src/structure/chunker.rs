@@ -62,7 +62,7 @@ impl StructuralChunker {
         let mut result = ChunkingResult::empty();
         let mut current_text = String::new();
         let mut current_start = 0;
-        let mut pending_heading: Option<&str> = None;
+        let mut pending_heading: Option<String> = None;
 
         for element in &doc.elements {
             match &element.data {
@@ -109,7 +109,7 @@ impl StructuralChunker {
                 ElementData::Heading(heading) => {
                     if self.options.include_section_headers {
                         // Keep heading with following content
-                        pending_heading = Some(heading.format().leak());
+                        pending_heading = Some(heading.format());
                     }
 
                     // Add heading to current text
@@ -171,7 +171,7 @@ impl StructuralChunker {
 
                         // Add pending heading context if any
                         if let Some(heading) = pending_heading.take() {
-                            current_text.push_str(heading);
+                            current_text.push_str(&heading);
                             current_text.push_str("\n\n");
                         }
                     }

@@ -15,7 +15,7 @@ use crate::types::{
     SearchResponse,
 };
 use crate::{MemvidError, Result};
-use log::warn;
+use tracing::warn;
 use std::collections::HashSet;
 use std::time::Instant;
 

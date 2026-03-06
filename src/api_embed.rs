@@ -21,6 +21,7 @@ use crate::error::{MemvidError, Result};
 use crate::types::embedding::EmbeddingProvider;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -81,6 +82,39 @@ pub fn get_openai_model_info(name: &str) -> &'static OpenAIModelInfo {
 #[must_use]
 pub fn default_openai_model_info() -> &'static OpenAIModelInfo {
     OPENAI_MODELS.iter().find(|m| m.is_default).unwrap()
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Returns `true` when `url` uses plain HTTP and is NOT targeting a loopback address.
+fn is_insecure_http_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("http://") else {
+        return false;
+    };
+    // Strip path, query, and fragment to isolate the authority.
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    // Strip userinfo (e.g. "user:pass@host").
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host = if let Some(stripped) = host_port.strip_prefix('[') {
+        // IPv6 bracket notation: [::1]:8080
+        stripped.split(']').next().unwrap_or_default()
+    } else {
+        // IPv4 or hostname: localhost:8080
+        host_port.split(':').next().unwrap_or_default()
+    };
+    !matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1")
+}
+
+/// Emit a warning if the URL uses HTTP instead of HTTPS (excluding localhost).
+fn warn_if_insecure_url(url: &str) {
+    if is_insecure_http_url(url) {
+        tracing::warn!(
+            "API base URL uses HTTP instead of HTTPS; credentials may be transmitted in plaintext"
+        );
+    }
 }
 
 // ============================================================================
@@ -232,7 +266,7 @@ pub struct OpenAIEmbedder {
     config: OpenAIConfig,
     model_info: &'static OpenAIModelInfo,
     client: Client,
-    api_key: String,
+    api_key: SecretString,
 }
 
 impl OpenAIEmbedder {
@@ -256,6 +290,10 @@ impl OpenAIEmbedder {
             });
         }
 
+        // Warn if base URL uses HTTP instead of HTTPS (except localhost)
+        warn_if_insecure_url(&config.base_url);
+
+        let api_key = SecretString::from(api_key);
         let model_info = get_openai_model_info(&config.model);
 
         let client = Client::builder()
@@ -299,11 +337,10 @@ impl OpenAIEmbedder {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", self.api_key)).map_err(|_| {
-                MemvidError::EmbeddingFailed {
+            HeaderValue::from_str(&format!("Bearer {}", self.api_key.expose_secret()))
+                .map_err(|_| MemvidError::EmbeddingFailed {
                     reason: "Invalid API key format".into(),
-                }
-            })?,
+                })?,
         );
 
         let mut backoff_ms = self.config.initial_backoff_ms;
@@ -456,7 +493,7 @@ impl EmbeddingProvider for OpenAIEmbedder {
 
     fn is_ready(&self) -> bool {
         // We have an API key, so we're ready
-        !self.api_key.is_empty()
+        !self.api_key.expose_secret().is_empty()
     }
 }
 
@@ -592,5 +629,47 @@ mod tests {
             .embed_text("Test with large model")
             .expect("Failed to embed text");
         assert_eq!(embedding.len(), 3072);
+    }
+
+    #[test]
+    fn test_is_insecure_http_url() {
+        // Loopback addresses are safe
+        assert!(!is_insecure_http_url("http://localhost"));
+        assert!(!is_insecure_http_url("http://localhost:8080/v1"));
+        assert!(!is_insecure_http_url("http://127.0.0.1"));
+        assert!(!is_insecure_http_url("http://127.0.0.1:3000/api"));
+        assert!(!is_insecure_http_url("http://[::1]"));
+        assert!(!is_insecure_http_url("http://[::1]:9090/v1"));
+
+        // Case-insensitive host matching
+        assert!(!is_insecure_http_url("http://LOCALHOST"));
+        assert!(!is_insecure_http_url("http://Localhost:8080/v1"));
+
+        // Userinfo in URL
+        assert!(!is_insecure_http_url("http://user@localhost/v1"));
+        assert!(!is_insecure_http_url("http://user:pass@127.0.0.1:8080"));
+
+        // Query and fragment on loopback
+        assert!(!is_insecure_http_url("http://localhost?health=1"));
+        assert!(!is_insecure_http_url("http://localhost#section"));
+
+        // HTTPS is never insecure
+        assert!(!is_insecure_http_url("https://api.openai.com/v1"));
+
+        // Remote HTTP is insecure
+        assert!(is_insecure_http_url("http://api.openai.com/v1"));
+        assert!(is_insecure_http_url("http://example.com"));
+
+        // Subdomain spoofing must NOT bypass the check
+        assert!(is_insecure_http_url("http://localhost.evil.com"));
+        assert!(is_insecure_http_url("http://127.0.0.1.evil.com"));
+
+        // Userinfo on remote host is still insecure
+        assert!(is_insecure_http_url("http://user@example.com/v1"));
+
+        // Case-insensitive scheme
+        assert!(is_insecure_http_url("HTTP://api.openai.com/v1"));
+        assert!(is_insecure_http_url("Http://example.com"));
+        assert!(!is_insecure_http_url("HTTP://localhost:8080"));
     }
 }

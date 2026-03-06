@@ -462,6 +462,11 @@ pub fn excel_serial_to_iso(serial: f64) -> Option<String> {
         return None;
     }
 
+    // Handle exact zero as "no date"
+    if serial == 0.0 {
+        return None;
+    }
+
     let days_from_epoch = serial.floor() as i64;
     let frac = serial - serial.floor();
 
@@ -584,6 +589,10 @@ mod tests {
         assert_eq!(excel_serial_to_iso(1.0), Some("1900-01-01".to_string()));
         assert_eq!(excel_serial_to_iso(44927.0), Some("2023-01-01".to_string()));
         assert!(excel_serial_to_iso(-1.0).is_none());
+        // Exact zero should return None (no valid date)
+        assert!(excel_serial_to_iso(0.0).is_none());
+        // Integer values should produce date-only output (no time component)
+        assert_eq!(excel_serial_to_iso(2.0), Some("1900-01-02".to_string()));
     }
 
     #[test]

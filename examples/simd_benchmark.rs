@@ -82,7 +82,7 @@ fn main() {
 /// SIMD L2 distance using the wide crate
 #[cfg(feature = "simd")]
 fn l2_distance_simd(a: &[f32], b: &[f32]) -> f32 {
-    memvid_core::simd::l2_distance_simd(a, b)
+    memvid_core::simd::l2_distance_simd(a, b).unwrap_or(f32::INFINITY)
 }
 
 #[cfg(not(feature = "simd"))]
