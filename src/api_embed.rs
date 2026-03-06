@@ -90,7 +90,8 @@ pub fn default_openai_model_info() -> &'static OpenAIModelInfo {
 
 /// Returns `true` when `url` uses plain HTTP and is NOT targeting a loopback address.
 fn is_insecure_http_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("http://") else {
         return false;
     };
     // Strip path, query, and fragment to isolate the authority.
@@ -665,5 +666,10 @@ mod tests {
 
         // Userinfo on remote host is still insecure
         assert!(is_insecure_http_url("http://user@example.com/v1"));
+
+        // Case-insensitive scheme
+        assert!(is_insecure_http_url("HTTP://api.openai.com/v1"));
+        assert!(is_insecure_http_url("Http://example.com"));
+        assert!(!is_insecure_http_url("HTTP://localhost:8080"));
     }
 }
