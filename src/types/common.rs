@@ -62,9 +62,12 @@ impl<'de> Deserialize<'de> for CanonicalEncoding {
         D: Deserializer<'de>,
     {
         let value = u32::deserialize(deserializer)?;
-        #[allow(clippy::cast_possible_truncation)]
-        let byte = (value & 0xFF) as u8;
-        CanonicalEncoding::from_byte(byte).or(Ok(CanonicalEncoding::default()))
+        let byte = u8::try_from(value).map_err(|_| {
+            <D::Error as serde::de::Error>::custom(format!(
+                "encoding value {value:#x} exceeds u8 range"
+            ))
+        })?;
+        CanonicalEncoding::from_byte(byte).map_err(<D::Error as serde::de::Error>::custom)
     }
 }
 

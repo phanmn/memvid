@@ -706,7 +706,11 @@ impl Memvid {
         if self.logic_mesh.needs_migration() {
             tracing::info!("migrating logic mesh node IDs from DefaultHasher to BLAKE3");
             self.logic_mesh.migrate_node_ids();
-            self.dirty = true;
+            if self.read_only {
+                tracing::info!("logic mesh migration deferred: handle is read-only");
+            } else {
+                self.dirty = true;
+            }
         }
 
         Ok(())

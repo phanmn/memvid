@@ -272,4 +272,29 @@ mod tests {
         let expected_checksum = calculate_checksum(&[]);
         assert_eq!(checksum, expected_checksum);
     }
+
+    #[test]
+    fn read_track_verified_accepts_matching_checksum() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries = vec![TimeIndexEntry::new(10, 1), TimeIndexEntry::new(20, 2)];
+        let (offset, length, checksum) =
+            append_track(&mut file, &mut entries).expect("append");
+
+        let read_back =
+            read_track_verified(&mut file, offset, length, checksum).expect("verified read");
+        assert_eq!(read_back, entries);
+    }
+
+    #[test]
+    fn read_track_verified_rejects_checksum_mismatch() {
+        let mut file = tempfile().expect("temp file");
+        let mut entries = vec![TimeIndexEntry::new(10, 1)];
+        let (offset, length, mut checksum) =
+            append_track(&mut file, &mut entries).expect("append");
+        checksum[0] ^= 0xFF;
+
+        let err = read_track_verified(&mut file, offset, length, checksum)
+            .expect_err("checksum mismatch");
+        assert!(matches!(err, MemvidError::ChecksumMismatch { .. }));
+    }
 }

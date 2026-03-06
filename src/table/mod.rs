@@ -129,6 +129,7 @@ mod tests {
         assert!(is_pdf_magic(b"%PDF-1.4"));
         assert!(is_pdf_magic(b"\xEF\xBB\xBF%PDF-1.7")); // With BOM
         assert!(is_pdf_magic(b"  %PDF-1.5")); // With whitespace
+        assert!(is_pdf_magic(b"\xEF\xBB\xBF   %PDF-1.6")); // With BOM + whitespace
         assert!(!is_pdf_magic(b"PK\x03\x04")); // ZIP/DOCX
         assert!(!is_pdf_magic(b"<html>"));
     }

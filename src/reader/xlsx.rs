@@ -16,6 +16,9 @@ const XLSX_MAX_FILE_BYTES: u64 = 104_857_600;
 /// Maximum decompressed size for any single ZIP entry (1 GB).
 const XLSX_MAX_ENTRY_BYTES: u64 = 1_073_741_824;
 
+/// Maximum total decompressed size across all ZIP entries (2 GB).
+const XLSX_MAX_TOTAL_BYTES: u64 = 2_147_483_648;
+
 /// Check XLSX byte-slice size against limits and validate ZIP entries
 /// against decompression bomb threshold.
 fn validate_xlsx_size(bytes: &[u8]) -> Result<()> {
@@ -28,9 +31,10 @@ fn validate_xlsx_size(bytes: &[u8]) -> Result<()> {
         });
     }
 
-    // Validate individual ZIP entry decompressed sizes
+    // Validate individual ZIP entry decompressed sizes and aggregate total
     let cursor = Cursor::new(bytes);
     if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
+        let mut total_decompressed: u64 = 0;
         for i in 0..archive.len() {
             if let Ok(mut entry) = archive.by_index(i) {
                 let entry_name = entry.name().to_string();
@@ -41,11 +45,19 @@ fn validate_xlsx_size(bytes: &[u8]) -> Result<()> {
                         Ok(0) => break,
                         Ok(n) => {
                             decompressed_bytes += n as u64;
+                            total_decompressed += n as u64;
                             if decompressed_bytes > XLSX_MAX_ENTRY_BYTES {
                                 return Err(crate::MemvidError::DecompressionTooLarge {
                                     entry: entry_name,
                                     size: decompressed_bytes,
                                     limit: XLSX_MAX_ENTRY_BYTES,
+                                });
+                            }
+                            if total_decompressed > XLSX_MAX_TOTAL_BYTES {
+                                return Err(crate::MemvidError::DecompressionTooLarge {
+                                    entry: format!("(aggregate across all entries, triggered at {entry_name})"),
+                                    size: total_decompressed,
+                                    limit: XLSX_MAX_TOTAL_BYTES,
                                 });
                             }
                         }
@@ -264,6 +276,10 @@ impl DocumentReader for XlsxReader {
                         .with_diagnostics(ReaderDiagnostics::default()))
                 }
             }
+            Err(
+                err @ (crate::MemvidError::FileTooLarge { .. }
+                | crate::MemvidError::DecompressionTooLarge { .. }),
+            ) => Err(err),
             Err(err) => {
                 // Calamine failed - try extractous as fallback
                 let mut fallback = PassthroughReader.extract(bytes, hint)?;

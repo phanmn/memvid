@@ -88,13 +88,26 @@ pub fn default_openai_model_info() -> &'static OpenAIModelInfo {
 // Helpers
 // ============================================================================
 
+/// Returns `true` when `url` uses plain HTTP and is NOT targeting a loopback address.
+fn is_insecure_http_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    // Extract the authority (host + optional port) before the first slash.
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = if let Some(stripped) = authority.strip_prefix('[') {
+        // IPv6 bracket notation: [::1]:8080
+        stripped.split(']').next().unwrap_or_default()
+    } else {
+        // IPv4 or hostname: localhost:8080
+        authority.split(':').next().unwrap_or_default()
+    };
+    !matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
+
 /// Emit a warning if the URL uses HTTP instead of HTTPS (excluding localhost).
 fn warn_if_insecure_url(url: &str) {
-    if url.starts_with("http://")
-        && !url.starts_with("http://localhost")
-        && !url.starts_with("http://127.0.0.1")
-        && !url.starts_with("http://[::1]")
-    {
+    if is_insecure_http_url(url) {
         tracing::warn!(
             url = %url,
             "API base URL uses HTTP instead of HTTPS; credentials may be transmitted in plaintext"
@@ -615,5 +628,27 @@ mod tests {
             .embed_text("Test with large model")
             .expect("Failed to embed text");
         assert_eq!(embedding.len(), 3072);
+    }
+
+    #[test]
+    fn test_is_insecure_http_url() {
+        // Loopback addresses are safe
+        assert!(!is_insecure_http_url("http://localhost"));
+        assert!(!is_insecure_http_url("http://localhost:8080/v1"));
+        assert!(!is_insecure_http_url("http://127.0.0.1"));
+        assert!(!is_insecure_http_url("http://127.0.0.1:3000/api"));
+        assert!(!is_insecure_http_url("http://[::1]"));
+        assert!(!is_insecure_http_url("http://[::1]:9090/v1"));
+
+        // HTTPS is never insecure
+        assert!(!is_insecure_http_url("https://api.openai.com/v1"));
+
+        // Remote HTTP is insecure
+        assert!(is_insecure_http_url("http://api.openai.com/v1"));
+        assert!(is_insecure_http_url("http://example.com"));
+
+        // Subdomain spoofing must NOT bypass the check
+        assert!(is_insecure_http_url("http://localhost.evil.com"));
+        assert!(is_insecure_http_url("http://127.0.0.1.evil.com"));
     }
 }

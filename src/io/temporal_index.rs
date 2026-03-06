@@ -566,4 +566,21 @@ mod tests {
             Err(MemvidError::InvalidTemporalTrack { .. })
         ));
     }
+
+    #[test]
+    fn reject_flags_out_of_range() {
+        let flags = u16::MAX as u32 + 1;
+        let mut mentions = Vec::new();
+        let mut anchors = Vec::new();
+        let mut file = tempfile::tempfile().expect("temp");
+
+        assert!(matches!(
+            append_track(&mut file, &mut mentions, &mut anchors, flags),
+            Err(MemvidError::InvalidTemporalTrack { .. })
+        ));
+        assert!(matches!(
+            calculate_checksum(&mentions, &anchors, flags),
+            Err(MemvidError::InvalidTemporalTrack { .. })
+        ));
+    }
 }
