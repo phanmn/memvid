@@ -697,11 +697,11 @@ impl LocalTextEmbedder {
             })?;
 
         // Get input and output names from session
-        let input_names: Vec<String> = session.inputs.iter().map(|i| i.name.clone()).collect();
+        let input_names: Vec<String> = session.inputs().iter().map(|i| i.name().to_string()).collect();
         let output_name = session
-            .outputs
+            .outputs()
             .first()
-            .map(|o| o.name.clone())
+            .map(|o| o.name().to_string())
             .unwrap_or_else(|| "last_hidden_state".to_string());
 
         // Create tensors

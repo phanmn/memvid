@@ -305,9 +305,9 @@ mod model_impl {
             // Get output name before inference (avoid borrow conflict)
             let output_name = self
                 .session
-                .outputs
+                .outputs()
                 .first()
-                .map(|o| o.name.clone())
+                .map(|o| o.name().to_string())
                 .unwrap_or_else(|| "logits".into());
 
             // Run inference

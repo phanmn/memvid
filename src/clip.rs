@@ -918,14 +918,14 @@ mod model {
 
             // Get input and output names from session before running
             let input_name = session
-                .inputs
+                .inputs()
                 .first()
-                .map(|i| i.name.clone())
+                .map(|i| i.name().to_string())
                 .unwrap_or_else(|| "pixel_values".into());
             let output_name = session
-                .outputs
+                .outputs()
                 .first()
-                .map(|o| o.name.clone())
+                .map(|o| o.name().to_string())
                 .unwrap_or_else(|| "image_embeds".into());
 
             // Create tensor from ndarray
@@ -1059,11 +1059,11 @@ mod model {
                 })?;
 
             // Get input and output names from session before running
-            let input_names: Vec<String> = session.inputs.iter().map(|i| i.name.clone()).collect();
+            let input_names: Vec<String> = session.inputs().iter().map(|i| i.name().to_string()).collect();
             let output_name = session
-                .outputs
+                .outputs()
                 .first()
-                .map(|o| o.name.clone())
+                .map(|o| o.name().to_string())
                 .unwrap_or_else(|| "text_embeds".into());
 
             // Create tensors from ndarray
