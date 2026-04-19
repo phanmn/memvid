@@ -57,12 +57,11 @@ use crate::types::{
 };
 #[cfg(feature = "parallel_segments")]
 use crate::types::{IndexSegmentRef, SegmentKind, SegmentSpan, SegmentStats};
-#[cfg(feature = "temporal_track")]
-
 use crate::{
     normalize_text, time_index_append, wal_config, ExtractedDocument, MemvidError, Result,
     TimeIndexEntry, TimeIndexManifest, VecIndexManifest, DEFAULT_SEARCH_TEXT_LIMIT,
 };
+
 #[cfg(feature = "temporal_track")]
 use crate::{
     AnchorSource, TemporalAnchor, TemporalContext, TemporalMention, TemporalMentionFlags,
@@ -3267,7 +3266,7 @@ impl Memvid {
 
         let mut prepared_payload: Option<(Vec<u8>, CanonicalEncoding, Option<u64>)> = None;
         let payload_tail = self.payload_region_end();
-        let projected = if let Some(bytes) = payload {
+        let _projected = if let Some(bytes) = payload {
             let (prepared, encoding, length) = if let Some(ref opts) = self.batch_opts {
                 prepare_canonical_payload_with_level(bytes, opts.compression_level)?
             } else {
@@ -3285,15 +3284,16 @@ impl Memvid {
             });
         };
 
-        let capacity_limit = self.capacity_limit();
-        if projected > capacity_limit {
-            let incoming_size = projected.saturating_sub(payload_tail);
-            return Err(MemvidError::CapacityExceeded {
-                current: payload_tail,
-                limit: capacity_limit,
-                required: incoming_size,
-            });
-        }
+        // TEMPORARY: Commented out capacity limit - allow unlimited file size
+        // let capacity_limit = self.capacity_limit();
+        // if projected > capacity_limit {
+        //     let incoming_size = projected.saturating_sub(payload_tail);
+        //     return Err(MemvidError::CapacityExceeded {
+        //         current: payload_tail,
+        //         limit: capacity_limit,
+        //         required: incoming_size,
+        //     });
+        // }
         let timestamp = options.timestamp.take().unwrap_or_else(|| {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

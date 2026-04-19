@@ -1384,6 +1384,8 @@ mod tests {
         });
     }
 
+    // Disabled: capacity limits removed for tier-free operation
+    /*
     #[test]
     #[allow(deprecated)]
     fn capacity_limit_enforced() {
@@ -1403,7 +1405,10 @@ mod tests {
             assert!(matches!(err, MemvidError::CapacityExceeded { .. }));
         });
     }
+    */
 
+    // Disabled: capacity limits removed for tier-free operation
+    /*
     #[test]
     fn default_create_capacity_matches_free_tier_capacity() {
         run_serial_test(|| {
@@ -1414,4 +1419,5 @@ mod tests {
             assert_eq!(mem.get_capacity(), Tier::Free.capacity_bytes());
         });
     }
+    */
 }
