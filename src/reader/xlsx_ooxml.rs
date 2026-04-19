@@ -324,7 +324,7 @@ fn parse_workbook_sheet_names(xml: &str) -> Vec<String> {
             {
                 for attr in e.attributes().flatten() {
                     if attr.key.as_ref() == b"name" {
-                        if let Ok(val) = attr.unescape_value() {
+                        if let Ok(val) = attr.decode_and_unescape_value(&reader) {
                             names.push(val.to_string());
                         }
                     }
@@ -364,12 +364,12 @@ fn parse_styles_xml(xml: &str, metadata: &mut OoxmlMetadata) {
                         for attr in e.attributes().flatten() {
                             match attr.key.as_ref() {
                                 b"numFmtId" => {
-                                    if let Ok(v) = attr.unescape_value() {
+                                    if let Ok(v) = attr.decode_and_unescape_value(&reader) {
                                         fmt_id = v.parse::<u32>().ok();
                                     }
                                 }
                                 b"formatCode" => {
-                                    if let Ok(v) = attr.unescape_value() {
+                                    if let Ok(v) = attr.decode_and_unescape_value(&reader) {
                                         fmt_code = Some(v.to_string());
                                     }
                                 }
@@ -384,7 +384,7 @@ fn parse_styles_xml(xml: &str, metadata: &mut OoxmlMetadata) {
                         let mut num_fmt_id = 0u32;
                         for attr in e.attributes().flatten() {
                             if attr.key.as_ref() == b"numFmtId" {
-                                if let Ok(v) = attr.unescape_value() {
+                                if let Ok(v) = attr.decode_and_unescape_value(&reader) {
                                     num_fmt_id = v.parse::<u32>().unwrap_or(0);
                                 }
                             }
@@ -425,7 +425,7 @@ fn parse_merge_cells_xml(xml: &str) -> Vec<MergedRegion> {
             {
                 for attr in e.attributes().flatten() {
                     if attr.key.as_ref() == b"ref" {
-                        if let Ok(val) = attr.unescape_value() {
+                        if let Ok(val) = attr.decode_and_unescape_value(&reader) {
                             if let Some(((tr, lc), (br, rc))) = parse_range_ref(&val) {
                                 regions.push(MergedRegion {
                                     top_row: tr,

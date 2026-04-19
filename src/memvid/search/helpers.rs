@@ -33,6 +33,7 @@ pub(super) fn empty_search_response(
         context: String::new(),
         next_cursor: None,
         engine,
+        stale_index_skips: 0,
     }
 }
 
@@ -344,13 +345,18 @@ pub(crate) fn attach_temporal_metadata(memvid: &mut Memvid, hits: &mut [SearchHi
 
                 let text = if mention_end > mention_start {
                     if !canonical_cache.contains_key(&frame_id) {
-                        let frame = memvid.toc.frames.get(frame_id as usize).cloned().ok_or(
-                            MemvidError::InvalidTimeIndex {
-                                reason: "frame id out of range".into(),
-                            },
-                        )?;
-                        let content = memvid.frame_content(&frame)?;
-                        canonical_cache.insert(frame_id, content);
+                        match memvid.toc.frames.get(frame_id as usize).cloned() {
+                            Some(frame) => {
+                                let content = memvid.frame_content(&frame)?;
+                                canonical_cache.insert(frame_id, content);
+                            }
+                            None => {
+                                tracing::warn!(
+                                    frame_id,
+                                    "skipping temporal text for stale frame_id"
+                                );
+                            }
+                        }
                     }
                     canonical_cache.get(&frame_id).and_then(|content| {
                         if mention_end <= content.len() {

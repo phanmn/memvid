@@ -6,9 +6,9 @@ mod pdf;
 mod pptx;
 mod xls;
 mod xlsx;
-pub(crate) mod xlsx_chunker;
-pub(crate) mod xlsx_ooxml;
-pub(crate) mod xlsx_table_detect;
+pub mod xlsx_chunker;
+pub mod xlsx_ooxml;
+pub mod xlsx_table_detect;
 
 use serde_json::Value;
 

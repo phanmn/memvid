@@ -576,6 +576,7 @@ impl Memvid {
                     snippet_chars: request.snippet_chars,
                     cursor: search_request.cursor.clone(),
                 },
+                stale_index_skips: 0,
             });
         }
 
@@ -659,6 +660,7 @@ impl Memvid {
                 snippet_chars: request.snippet_chars,
                 cursor: search_request.cursor.clone(),
             },
+            stale_index_skips: 0,
         })
     }
 }
