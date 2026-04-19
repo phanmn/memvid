@@ -210,4 +210,12 @@ pub struct SearchResponse {
     #[serde(default)]
     /// Engine responsible for the results.
     pub engine: SearchEngineKind,
+    /// Number of search hits skipped due to stale frame_ids in the index.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub stale_index_skips: u32,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_zero(v: &u32) -> bool {
+    *v == 0
 }

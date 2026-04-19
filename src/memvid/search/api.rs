@@ -362,6 +362,7 @@ impl Memvid {
                 context: build_context(&[]),
                 next_cursor: None,
                 engine: SearchEngineKind::Hybrid,
+                stale_index_skips: 0,
             });
         }
 
@@ -466,6 +467,7 @@ impl Memvid {
             context,
             next_cursor: None,
             engine: SearchEngineKind::Hybrid,
+            stale_index_skips: 0,
         })
     }
 

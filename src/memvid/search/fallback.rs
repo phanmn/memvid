@@ -39,18 +39,24 @@ pub(super) fn search_with_lex_fallback(
     let max_snippets_per_doc = request.top_k.max(1);
 
     let mut evaluated = Vec::new();
+    let mut stale_skips = 0u32;
     for matched in &matches {
         if let Some(filter) = candidate_filter {
             if !filter.contains(&matched.frame_id) {
                 continue;
             }
         }
-        let frame_meta = usize::try_from(matched.frame_id)
+        let Some(frame_meta) = usize::try_from(matched.frame_id)
             .ok()
             .and_then(|idx| memvid.toc.frames.get(idx))
-            .ok_or(MemvidError::InvalidTimeIndex {
-                reason: "frame id out of range".into(),
-            })?;
+        else {
+            tracing::warn!(
+                frame_id = matched.frame_id,
+                "skipping search hit with stale frame_id"
+            );
+            stale_skips = stale_skips.saturating_add(1);
+            continue;
+        };
         let content_lower = matched.content.to_ascii_lowercase();
         let ctx = EvaluationContext {
             frame: frame_meta,
@@ -86,14 +92,18 @@ pub(super) fn search_with_lex_fallback(
     let mut hits = Vec::new();
     let mut produced = 0usize;
     for (matched, slices) in evaluated {
-        let frame_meta = memvid
+        let Some(frame_meta) = memvid
             .toc
             .frames
             .get(usize::try_from(matched.frame_id).unwrap_or(usize::MAX))
             .cloned()
-            .ok_or(MemvidError::InvalidTimeIndex {
-                reason: "frame id out of range".into(),
-            })?;
+        else {
+            tracing::warn!(
+                frame_id = matched.frame_id,
+                "skipping stale frame_id in snippet assembly"
+            );
+            continue;
+        };
         let canonical = memvid.frame_content(&frame_meta)?;
         let canonical_limit = frame_meta.canonical_length.map_or_else(
             || canonical.len(),
@@ -200,6 +210,7 @@ pub(super) fn search_with_lex_fallback(
         context,
         next_cursor,
         engine: SearchEngineKind::LexFallback,
+        stale_index_skips: stale_skips,
     })
 }
 
@@ -250,6 +261,7 @@ pub(super) fn search_with_filters_only(
             context: build_context(&[]),
             next_cursor: None,
             engine: SearchEngineKind::LexFallback,
+            stale_index_skips: 0,
         });
     }
 
@@ -322,5 +334,6 @@ pub(super) fn search_with_filters_only(
         context,
         next_cursor,
         engine: SearchEngineKind::LexFallback,
+        stale_index_skips: 0,
     })
 }
